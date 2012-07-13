@@ -190,6 +190,8 @@ module EventMachine
           @tails.pop.call
         end
 
+        @reactor_running = false
+
         begin
           release_machine
         ensure
@@ -214,7 +216,6 @@ module EventMachine
 
           @next_tick_queue = []
         end
-        @reactor_running = false
         @reactor_thread = nil
       end
 
