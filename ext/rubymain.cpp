@@ -43,6 +43,7 @@ static VALUE Intern_at_signature;
 static VALUE Intern_at_timers;
 static VALUE Intern_at_conns;
 static VALUE Intern_at_error_handler;
+static VALUE Intern_at_debug_handler;
 static VALUE Intern_event_callback;
 static VALUE Intern_run_deferred_callbacks;
 static VALUE Intern_delete;
@@ -75,6 +76,26 @@ static inline VALUE ensure_conn(const unsigned long signature)
 }
 
 
+static inline VALUE get_event_symbol(int event)
+{
+	switch (event) {
+		case EM_TIMER_FIRED:				return ID2SYM(rb_intern("EM_TIMER_FIRED"));
+		case EM_CONNECTION_READ:			return ID2SYM(rb_intern("EM_CONNECTION_READ"));
+		case EM_CONNECTION_UNBOUND:			return ID2SYM(rb_intern("EM_CONNECTION_UNBOUND"));
+		case EM_CONNECTION_ACCEPTED:		return ID2SYM(rb_intern("EM_CONNECTION_ACCEPTED"));
+		case EM_CONNECTION_COMPLETED:		return ID2SYM(rb_intern("EM_CONNECTION_COMPLETED"));
+		case EM_LOOPBREAK_SIGNAL:			return ID2SYM(rb_intern("EM_LOOPBREAK_SIGNAL"));
+		case EM_CONNECTION_NOTIFY_READABLE:	return ID2SYM(rb_intern("EM_CONNECTION_NOTIFY_READABLE"));
+		case EM_CONNECTION_NOTIFY_WRITABLE:	return ID2SYM(rb_intern("EM_CONNECTION_NOTIFY_WRITABLE"));
+		case EM_SSL_HANDSHAKE_COMPLETED:	return ID2SYM(rb_intern("EM_SSL_HANDSHAKE_COMPLETED"));
+		case EM_SSL_VERIFY:					return ID2SYM(rb_intern("EM_SSL_VERIFY"));
+		case EM_PROXY_TARGET_UNBOUND:		return ID2SYM(rb_intern("EM_PROXY_TARGET_UNBOUND"));
+		case EM_PROXY_COMPLETED:			return ID2SYM(rb_intern("EM_PROXY_COMPLETED"));
+		default:							return Qnil;
+	}
+}
+
+
 /****************
 t_event_callback
 ****************/
@@ -86,6 +107,20 @@ static inline void event_callback (struct em_event* e)
 	const char *data_str = e->data_str;
 	const unsigned long data_num = e->data_num;
 
+	int debug_on = 0;
+	uint64_t current_loop_time = 0;
+	uint64_t last_activity_time = 0;
+	uint64_t event_callback_start = 0;
+	uint64_t event_callback_stop = 0;
+	uint64_t event_duration = 0;
+
+	if (rb_ivar_defined(EmModule, Intern_at_debug_handler)) {
+		debug_on = 1;
+		current_loop_time = evma_get_current_loop_time();
+		last_activity_time = evma_get_last_activity_time(signature);
+		event_callback_start = evma_get_real_time();
+	}
+
 	switch (event) {
 		case EM_CONNECTION_READ:
 		{
@@ -93,7 +128,7 @@ static inline void event_callback (struct em_event* e)
 			if (conn == Qnil)
 				rb_raise (EM_eConnectionNotBound, "received %lu bytes of data for unknown signature: %lu", data_num, signature);
 			rb_funcall (conn, Intern_receive_data, 1, rb_str_new (data_str, data_num));
-			return;
+			goto event_callback_finish;
 		}
 		case EM_CONNECTION_SENDERROR:
 		{
@@ -106,35 +141,35 @@ static inline void event_callback (struct em_event* e)
 		case EM_CONNECTION_ACCEPTED:
 		{
 			rb_funcall (EmModule, Intern_event_callback, 3, ULONG2NUM(signature), INT2FIX(event), ULONG2NUM(data_num));
-			return;
+			goto event_callback_finish;
 		}
 		case EM_CONNECTION_UNBOUND:
 		{
 			rb_funcall (EmModule, Intern_event_callback, 3, ULONG2NUM(signature), INT2FIX(event), ULONG2NUM(data_num));
-			return;
+			goto event_callback_finish;
 		}
 		case EM_CONNECTION_COMPLETED:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_connection_completed, 0);
-			return;
+			goto event_callback_finish;
 		}
 		case EM_CONNECTION_NOTIFY_READABLE:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_notify_readable, 0);
-			return;
+			goto event_callback_finish;
 		}
 		case EM_CONNECTION_NOTIFY_WRITABLE:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_notify_writable, 0);
-			return;
+			goto event_callback_finish;
 		}
 		case EM_LOOPBREAK_SIGNAL:
 		{
 			rb_funcall (EmModule, Intern_run_deferred_callbacks, 0);
-			return;
+			goto event_callback_finish;
 		}
 		case EM_TIMER_FIRED:
 		{
@@ -146,14 +181,14 @@ static inline void event_callback (struct em_event* e)
 			} else {
 				rb_funcall (timer, Intern_call, 0);
 			}
-			return;
+			goto event_callback_finish;
 		}
 		#ifdef WITH_SSL
 		case EM_SSL_HANDSHAKE_COMPLETED:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_ssl_handshake_completed, 0);
-			return;
+			goto event_callback_finish;
 		}
 		case EM_SSL_VERIFY:
 		{
@@ -161,22 +196,72 @@ static inline void event_callback (struct em_event* e)
 			VALUE should_accept = rb_funcall (conn, Intern_ssl_verify_peer, 1, rb_str_new(data_str, data_num));
 			if (RTEST(should_accept))
 				evma_accept_ssl_peer (signature);
-			return;
+			goto event_callback_finish;
 		}
 		#endif
 		case EM_PROXY_TARGET_UNBOUND:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_proxy_target_unbound, 0);
-			return;
+			goto event_callback_finish;
 		}
 		case EM_PROXY_COMPLETED:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_proxy_completed, 0);
-			return;
+			goto event_callback_finish;
 		}
 	}
+
+	event_callback_finish:
+
+	if (debug_on) {
+		event_callback_stop = evma_get_real_time();
+		event_duration = event_callback_stop - event_callback_start;
+
+		VALUE current_loop_time_value = Qnil;
+		VALUE last_activity_time_value = Qnil;
+		VALUE connection = rb_hash_aref(EmConnsHash, ULONG2NUM(signature));
+		VALUE debug_handler = rb_ivar_get(EmModule, Intern_at_debug_handler);
+
+#		ifndef HAVE_RB_TIME_NEW
+		static VALUE cTime = rb_path2class("Time");
+		static ID at = rb_intern("at");
+#		endif
+
+		if (current_loop_time != 0) {
+#			ifdef HAVE_RB_TIME_NEW
+			current_loop_time_value = rb_time_new(
+				current_loop_time / 1000000,
+				current_loop_time % 1000000);
+#			else
+			current_loop_time_value = rb_funcall(cTime, at, 2,
+				INT2NUM(current_loop_time / 1000000),
+				INT2NUM(current_loop_time % 1000000));
+#			endif
+		}
+
+		if (last_activity_time != 0) {
+#			ifdef HAVE_RB_TIME_NEW
+			last_activity_time_value = rb_time_new(
+				last_activity_time / 1000000,
+				last_activity_time % 1000000);
+#			else
+			last_activity_time_value = rb_funcall(cTime, at, 2,
+				INT2NUM(last_activity_time / 1000000),
+				INT2NUM(last_activity_time % 1000000));
+#			endif
+		}
+
+		rb_funcall(debug_handler, Intern_call, 7,
+			ULONG2NUM(signature), connection,
+			get_event_symbol(event),
+			last_activity_time_value, current_loop_time_value,
+			rb_float_new((double)event_duration / 1000),
+			data_str ? rb_str_new(data_str, data_num) : ULONG2NUM(data_num));
+	}
+
+	return;
 }
 
 /*******************
@@ -1182,6 +1267,7 @@ extern "C" void Init_rubyeventmachine()
 	Intern_at_timers = rb_intern ("@timers");
 	Intern_at_conns = rb_intern ("@conns");
 	Intern_at_error_handler = rb_intern("@error_handler");
+	Intern_at_debug_handler = rb_intern("@debug_handler");
 
 	Intern_event_callback = rb_intern ("event_callback");
 	Intern_run_deferred_callbacks = rb_intern ("run_deferred_callbacks");
