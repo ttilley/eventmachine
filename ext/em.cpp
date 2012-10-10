@@ -673,7 +673,7 @@ EventMachine_t::_TimeTilNextEvent
 
 timeval EventMachine_t::_TimeTilNextEvent()
 {
-	// 29jul11: Changed calculation base from MyCurrentLoopTime to the 
+	// 29jul11: Changed calculation base from MyCurrentLoopTime to the
 	// real time. As MyCurrentLoopTime is set at the beginning of an
 	// iteration and this calculation is done at the end, evenmachine
 	// will potentially oversleep by the amount of time the iteration
@@ -695,7 +695,7 @@ timeval EventMachine_t::_TimeTilNextEvent()
 	if (!NewDescriptors.empty() || !ModifiedDescriptors.empty()) {
 		next_event = current_time;
 	}
-	
+
 	timeval tv;
 
 	if (next_event == 0 || NumCloseScheduled > 0) {

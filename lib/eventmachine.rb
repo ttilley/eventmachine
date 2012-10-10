@@ -1320,6 +1320,21 @@ module EventMachine
     end
   end
 
+  # Set a custom debug handler
+  #
+  # EM.debug_handler {|signature, connection, event_type,
+  #                    last_activity_time, loop_start_time,
+  #                    event_duration_in_ms, data|
+  #    puts event_type
+  # }
+  def self.debug_handler(cb = nil, &blk)
+    if cb || blk
+      @debug_handler = cb || blk
+    elsif instance_variable_defined? :@debug_handler
+      remove_instance_variable :@debug_handler
+    end
+  end
+
   # This method allows for direct writing of incoming data back out to another descriptor, at the C++ level in the reactor.
   # This is very efficient and especially useful for proxies where high performance is required. Propogating data from a server response
   # all the way up to Ruby, and then back down to the reactor to be sent back to the client, is often unnecessary and
