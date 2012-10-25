@@ -2045,8 +2045,11 @@ const unsigned long EventMachine_t::Socketpair (char * const*cmd_strings)
 		execvp (cmd_strings[0], cmd_strings+1);
 		exit (-1); // end the child process if the exec doesn't work.
 	}
-	else
-		throw std::runtime_error ("no fork");
+	else {
+		char errbuf[200];
+		sprintf(errbuf, "no fork: %s", strerror(errno));
+		throw std::runtime_error(errbuf);
+	}
 
 	return output_binding;
 	#endif
