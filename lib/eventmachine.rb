@@ -1173,7 +1173,7 @@ module EventMachine
     # Perhaps misnamed since the underlying function uses socketpair and is full-duplex.
 
     klass = klass_from_handler(Connection, handler, *args)
-    w = Shellwords::shellwords( cmd )
+    w = cmd.is_a?(Enumerable) ? cmd.to_a : Shellwords::shellwords(cmd)
     w.unshift( w.first ) if w.first
     s = invoke_popen( w )
     c = klass.new s, *args
