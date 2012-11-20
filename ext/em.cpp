@@ -122,7 +122,7 @@ EventMachine_t::~EventMachine_t()
 
 	// Remove any file watch descriptors
 	while(!Files.empty()) {
-		map<int, Bindable_t*>::iterator f = Files.begin();
+		std::map<int, Bindable_t*>::iterator f = Files.begin();
 		UnwatchFile (f->first);
 	}
 
@@ -262,7 +262,7 @@ int EventMachine_t::SetRlimitNofile (int nofiles)
 		// TODO, emit an error message someday when we have proper debug levels.
 	}
 	getrlimit (RLIMIT_NOFILE, &rlim);
-	return rlim.rlim_cur;
+	return (int)rlim.rlim_cur;
 	#endif
 
 	#ifdef OS_WIN32
@@ -383,7 +383,7 @@ EventMachine_t::_DispatchHeartbeats
 void EventMachine_t::_DispatchHeartbeats()
 {
 	while (true) {
-		multimap<uint64_t,EventableDescriptor*>::iterator i = Heartbeats.begin();
+		std::multimap<uint64_t,EventableDescriptor*>::iterator i = Heartbeats.begin();
 		if (i == Heartbeats.end())
 			break;
 		if (i->first > MyCurrentLoopTime)
@@ -404,9 +404,9 @@ void EventMachine_t::QueueHeartbeat(EventableDescriptor *ed)
 
 	if (heartbeat) {
 		#ifndef HAVE_MAKE_PAIR
-		Heartbeats.insert (multimap<uint64_t,EventableDescriptor*>::value_type (heartbeat, ed));
+		Heartbeats.insert (std::multimap<uint64_t,EventableDescriptor*>::value_type (heartbeat, ed));
 		#else
-		Heartbeats.insert (make_pair (heartbeat, ed));
+		Heartbeats.insert (std::make_pair (heartbeat, ed));
 		#endif
 	}
 }
@@ -417,8 +417,8 @@ EventMachine_t::ClearHeartbeat
 
 void EventMachine_t::ClearHeartbeat(uint64_t key, EventableDescriptor* ed)
 {
-	multimap<uint64_t,EventableDescriptor*>::iterator it;
-	pair<multimap<uint64_t,EventableDescriptor*>::iterator,multimap<uint64_t,EventableDescriptor*>::iterator> ret;
+	std::multimap<uint64_t,EventableDescriptor*>::iterator it;
+	std::pair<std::multimap<uint64_t,EventableDescriptor*>::iterator,std::multimap<uint64_t,EventableDescriptor*>::iterator> ret;
 	ret = Heartbeats.equal_range (key);
 	for (it = ret.first; it != ret.second; ++it) {
 		if (it->second == ed) {
@@ -509,6 +509,69 @@ bool EventMachine_t::_RunOnce()
 }
 
 
+#ifdef HAVE_EPOLL
+struct epoll_wait_arg_s {
+	struct epoll_event* events;
+	int epfd;
+	int maxevents;
+	int timeout;
+	int retval;
+	int error;
+};
+
+static void* _RunEpollWait(void* ptr)
+{
+	struct epoll_wait_arg_s *args = (struct epoll_wait_arg_s*)ptr;
+	args->retval = args->error = 0;
+
+	int retval = epoll_wait(args->epfd,
+							args->events, args->maxevents,
+							args->timeout);
+	args->retval = retval;
+	if (retval < 0) {
+		args->error = errno;
+	} else {
+		args->error = 0;
+	}
+
+	return &args->retval;
+}
+#endif
+
+#ifdef HAVE_KQUEUE
+struct kevent_arg_s {
+	struct kevent* changelist;
+	struct kevent* eventlist;
+	struct timespec* timeout;
+	int kqfd;
+	int nchanges;
+	int nevents;
+	int retval;
+	int error;
+};
+
+static void* _RunKqueueKevent(void* ptr)
+{
+	struct kevent_arg_s *args = (struct kevent_arg_s*)ptr;
+	struct timespec ts = *(args->timeout);
+	ts.tv_sec = ts.tv_nsec = 0;
+	args->retval = args->error = 0;
+
+	int retval = kevent(args->kqfd,
+						args->changelist, args->nchanges,
+						args->eventlist, args->nevents,
+						&ts);
+	args->retval = retval;
+	if (retval < 0) {
+		args->error = errno;
+	} else {
+		args->error = 0;
+	}
+
+	return &args->retval;
+}
+#endif
+
 
 /*****************************
 EventMachine_t::_RunEpollOnce
@@ -521,6 +584,9 @@ bool EventMachine_t::_RunEpollOnce()
 	int s;
 
 	timeval tv = _TimeTilNextEvent();
+	int duration = 0;
+	duration = duration + (tv.tv_sec * 1000);
+	duration = duration + (tv.tv_usec / 1000);
 
 	#ifdef BUILD_FOR_RUBY
 	int ret = 0;
@@ -537,13 +603,17 @@ bool EventMachine_t::_RunEpollOnce()
 		return true;
 	}
 
-	TRAP_BEG;
-	s = epoll_wait (epfd, epoll_events, MaxEvents, 0);
-	TRAP_END;
+	struct epoll_wait_arg_s epoll_wait_args;
+	epoll_wait_args.epfd = epfd;
+	epoll_wait_args.events = epoll_events;
+	epoll_wait_args.maxevents = MaxEvents;
+	epoll_wait_args.timeout = duration;
+
+	em_blocking_region(_RunEpollWait, &epoll_wait_args, RUBY_UBF_IO, 0);
+	s = epoll_wait_args.retval;
+	errno = epoll_wait_args.error;
+
 	#else
-	int duration = 0;
-	duration = duration + (tv.tv_sec * 1000);
-	duration = duration + (tv.tv_usec / 1000);
 	s = epoll_wait (epfd, epoll_events, MaxEvents, duration);
 	#endif
 
@@ -611,10 +681,18 @@ bool EventMachine_t::_RunKqueueOnce()
 		return true;
 	}
 
-	TRAP_BEG;
-	ts.tv_sec = ts.tv_nsec = 0;
-	k = kevent (kqfd, NULL, 0, Karray, MaxEvents, &ts);
-	TRAP_END;
+	struct kevent_arg_s kevent_args;
+	kevent_args.kqfd = kqfd;
+	kevent_args.changelist = NULL;
+	kevent_args.nchanges = 0;
+	kevent_args.eventlist = Karray;
+	kevent_args.nevents = MaxEvents;
+	kevent_args.timeout = &ts;
+
+	em_blocking_region(_RunKqueueKevent, &kevent_args, RUBY_UBF_IO, 0);
+	k = kevent_args.retval;
+	errno = kevent_args.error;
+
 	#else
 	k = kevent (kqfd, NULL, 0, Karray, MaxEvents, &ts);
 	#endif
@@ -644,7 +722,7 @@ bool EventMachine_t::_RunKqueueOnce()
 				else if (ke->filter == EVFILT_WRITE)
 					ed->Write();
 				else
-					cerr << "Discarding unknown kqueue event " << ke->filter << endl;
+					std::cerr << "Discarding unknown kqueue event " << ke->filter << std::endl;
 
 				break;
 		}
@@ -652,13 +730,6 @@ bool EventMachine_t::_RunKqueueOnce()
 		--k;
 		++ke;
 	}
-
-	// TODO, replace this with rb_thread_blocking_region for 1.9 builds.
-	#ifdef BUILD_FOR_RUBY
-	if (!rb_thread_alone()) {
-		rb_thread_schedule();
-	}
-	#endif
 
 	return true;
 	#else
@@ -682,12 +753,12 @@ timeval EventMachine_t::_TimeTilNextEvent()
 	uint64_t current_time = GetRealTime();
 
 	if (!Heartbeats.empty()) {
-		multimap<uint64_t,EventableDescriptor*>::iterator heartbeats = Heartbeats.begin();
+		std::multimap<uint64_t,EventableDescriptor*>::iterator heartbeats = Heartbeats.begin();
 		next_event = heartbeats->first;
 	}
 
 	if (!Timers.empty()) {
-		multimap<uint64_t,Timer_t>::iterator timers = Timers.begin();
+		std::multimap<uint64_t,Timer_t>::iterator timers = Timers.begin();
 		if (next_event == 0 || timers->first < next_event)
 			next_event = timers->first;
 	}
@@ -731,7 +802,7 @@ void EventMachine_t::_CleanupSockets()
 	// hasn't yet been set to INVALID_SOCKET.
 	// In kqueue, closing a descriptor automatically removes its event filters.
 	int i, j;
-	int nSockets = Descriptors.size();
+	long nSockets = (long)Descriptors.size();
 	for (i=0, j=0; i < nSockets; i++) {
 		EventableDescriptor *ed = Descriptors[i];
 		assert (ed);
@@ -801,14 +872,12 @@ SelectData_t::SelectData_t()
 _SelectDataSelect
 *****************/
 
-#ifdef HAVE_TBR
-static VALUE _SelectDataSelect (void *v)
+static void* _SelectDataSelect (void *v)
 {
 	SelectData_t *sd = (SelectData_t*)v;
 	sd->nSockets = select (sd->maxsocket+1, &(sd->fdreads), &(sd->fdwrites), &(sd->fderrors), &(sd->tv));
-	return Qnil;
+	return sd;
 }
-#endif
 
 /*********************
 SelectData_t::_Select
@@ -816,14 +885,8 @@ SelectData_t::_Select
 
 int SelectData_t::_Select()
 {
-	#ifdef HAVE_TBR
-	rb_thread_blocking_region (_SelectDataSelect, (void*)this, RUBY_UBF_IO, 0);
+	em_blocking_region(_SelectDataSelect, (void*)this, RUBY_UBF_IO, 0);
 	return nSockets;
-	#endif
-
-	#ifndef HAVE_TBR
-	return EmSelect (maxsocket+1, &fdreads, &fdwrites, &fderrors, &tv);
-	#endif
 }
 #endif
 
@@ -1027,7 +1090,7 @@ void EventMachine_t::_RunTimers()
 	// one that hasn't expired yet.
 
 	while (true) {
-		multimap<uint64_t,Timer_t>::iterator i = Timers.begin();
+		std::multimap<uint64_t,Timer_t>::iterator i = Timers.begin();
 		if (i == Timers.end())
 			break;
 		if (i->first > MyCurrentLoopTime)
@@ -1044,7 +1107,7 @@ void EventMachine_t::_RunTimers()
 EventMachine_t::InstallOneshotTimer
 ***********************************/
 
-const unsigned long EventMachine_t::InstallOneshotTimer (int milliseconds)
+unsigned long EventMachine_t::InstallOneshotTimer (int milliseconds)
 {
 	if (Timers.size() > MaxOutstandingTimers)
 		return false;
@@ -1054,9 +1117,9 @@ const unsigned long EventMachine_t::InstallOneshotTimer (int milliseconds)
 
 	Timer_t t;
 	#ifndef HAVE_MAKE_PAIR
-	multimap<uint64_t,Timer_t>::iterator i = Timers.insert (multimap<uint64_t,Timer_t>::value_type (fire_at, t));
+	std::multimap<uint64_t,Timer_t>::iterator i = Timers.insert (std::multimap<uint64_t,Timer_t>::value_type (fire_at, t));
 	#else
-	multimap<uint64_t,Timer_t>::iterator i = Timers.insert (make_pair (fire_at, t));
+	std::multimap<uint64_t,Timer_t>::iterator i = Timers.insert (std::make_pair (fire_at, t));
 	#endif
 	return i->second.GetBinding();
 }
@@ -1066,7 +1129,7 @@ const unsigned long EventMachine_t::InstallOneshotTimer (int milliseconds)
 EventMachine_t::ConnectToServer
 *******************************/
 
-const unsigned long EventMachine_t::ConnectToServer (const char *bind_addr, int bind_port, const char *server, int port)
+unsigned long EventMachine_t::ConnectToServer (const char *bind_addr, int bind_port, const char *server, int port)
 {
 	/* We want to spend no more than a few seconds waiting for a connection
 	 * to a remote host. So we use a nonblocking connect.
@@ -1252,7 +1315,7 @@ const unsigned long EventMachine_t::ConnectToServer (const char *bind_addr, int 
 EventMachine_t::ConnectToUnixServer
 ***********************************/
 
-const unsigned long EventMachine_t::ConnectToUnixServer (const char *server)
+unsigned long EventMachine_t::ConnectToUnixServer (const char *server)
 {
 	/* Connect to a Unix-domain server, which by definition is running
 	 * on the same host.
@@ -1283,8 +1346,7 @@ const unsigned long EventMachine_t::ConnectToUnixServer (const char *server)
 	if (strlen(server) >= sizeof(pun.sun_path))
 		throw std::runtime_error ("unix-domain server name is too long");
 
-
-	strcpy (pun.sun_path, server);
+	strcpy(pun.sun_path, server);
 
 	int fd = socket (AF_LOCAL, SOCK_STREAM, 0);
 	if (fd == INVALID_SOCKET)
@@ -1325,7 +1387,7 @@ const unsigned long EventMachine_t::ConnectToUnixServer (const char *server)
 EventMachine_t::AttachFD
 ************************/
 
-const unsigned long EventMachine_t::AttachFD (int fd, bool watch_mode)
+unsigned long EventMachine_t::AttachFD (int fd, bool watch_mode)
 {
 	#ifdef OS_UNIX
 	if (fcntl(fd, F_GETFL, 0) < 0)
@@ -1497,7 +1559,7 @@ struct sockaddr *name2address (const char *server, int port, int *family, int *b
 EventMachine_t::CreateTcpServer
 *******************************/
 
-const unsigned long EventMachine_t::CreateTcpServer (const char *server, int port)
+unsigned long EventMachine_t::CreateTcpServer (const char *server, int port)
 {
 	/* Create a TCP-acceptor (server) socket and add it to the event machine.
 	 * Return the binding of the new acceptor to the caller.
@@ -1580,7 +1642,7 @@ const unsigned long EventMachine_t::CreateTcpServer (const char *server, int por
 EventMachine_t::OpenDatagramSocket
 **********************************/
 
-const unsigned long EventMachine_t::OpenDatagramSocket (const char *address, int port)
+unsigned long EventMachine_t::OpenDatagramSocket (const char *address, int port)
 {
 	unsigned long output_binding = 0;
 
@@ -1786,7 +1848,7 @@ void EventMachine_t::_ModifyDescriptors()
 
 	#ifdef HAVE_EPOLL
 	if (bEpoll) {
-		set<EventableDescriptor*>::iterator i = ModifiedDescriptors.begin();
+		std::set<EventableDescriptor*>::iterator i = ModifiedDescriptors.begin();
 		while (i != ModifiedDescriptors.end()) {
 			assert (*i);
 			_ModifyEpollEvent (*i);
@@ -1843,7 +1905,7 @@ void EventMachine_t::Deregister (EventableDescriptor *ed)
 EventMachine_t::CreateUnixDomainServer
 **************************************/
 
-const unsigned long EventMachine_t::CreateUnixDomainServer (const char *filename)
+unsigned long EventMachine_t::CreateUnixDomainServer (const char *filename)
 {
 	/* Create a UNIX-domain acceptor (server) socket and add it to the event machine.
 	 * Return the binding of the new acceptor to the caller.
@@ -1969,7 +2031,7 @@ const char *EventMachine_t::Popen (const char *cmd, const char *mode)
 EventMachine_t::Socketpair
 **************************/
 
-const unsigned long EventMachine_t::Socketpair (char * const*cmd_strings)
+unsigned long EventMachine_t::Socketpair (char * const*cmd_strings)
 {
 	#ifdef OS_WIN32
 	throw std::runtime_error ("socketpair is currently unavailable on this platform");
@@ -2036,7 +2098,7 @@ const unsigned long EventMachine_t::Socketpair (char * const*cmd_strings)
 EventMachine_t::OpenKeyboard
 ****************************/
 
-const unsigned long EventMachine_t::OpenKeyboard()
+unsigned long EventMachine_t::OpenKeyboard()
 {
 	KeyboardDescriptor *kd = new KeyboardDescriptor (this);
 	if (!kd)
@@ -2060,7 +2122,7 @@ int EventMachine_t::GetConnectionCount ()
 EventMachine_t::WatchPid
 ************************/
 
-const unsigned long EventMachine_t::WatchPid (int pid)
+unsigned long EventMachine_t::WatchPid (int pid)
 {
 	#ifdef HAVE_KQUEUE
 	if (!bKqueue)
@@ -2078,11 +2140,9 @@ const unsigned long EventMachine_t::WatchPid (int pid)
 		sprintf(errbuf, "failed to register file watch descriptor with kqueue: %s", strerror(errno));
 		throw std::runtime_error(errbuf);
 	}
-	#endif
 
-	#ifdef HAVE_KQUEUE
 	Bindable_t* b = new Bindable_t();
-	Pids.insert(make_pair (pid, b));
+	Pids.insert(std::make_pair (pid, b));
 
 	return b->GetBinding();
 	#endif
@@ -2116,7 +2176,7 @@ void EventMachine_t::UnwatchPid (int pid)
 
 void EventMachine_t::UnwatchPid (const unsigned long sig)
 {
-	for(map<int, Bindable_t*>::iterator i=Pids.begin(); i != Pids.end(); i++)
+	for(std::map<int, Bindable_t*>::iterator i=Pids.begin(); i != Pids.end(); i++)
 	{
 		if (i->second->GetBinding() == sig) {
 			UnwatchPid (i->first);
@@ -2132,7 +2192,7 @@ void EventMachine_t::UnwatchPid (const unsigned long sig)
 EventMachine_t::WatchFile
 *************************/
 
-const unsigned long EventMachine_t::WatchFile (const char *fpath)
+unsigned long EventMachine_t::WatchFile (const char *fpath)
 {
 	struct stat sb;
 	int sres;
@@ -2178,7 +2238,7 @@ const unsigned long EventMachine_t::WatchFile (const char *fpath)
 
 	if (wd != -1) {
 		Bindable_t* b = new Bindable_t();
-		Files.insert(make_pair (wd, b));
+		Files.insert(std::make_pair (wd, b));
 
 		return b->GetBinding();
 	}
@@ -2212,7 +2272,7 @@ void EventMachine_t::UnwatchFile (int wd)
 
 void EventMachine_t::UnwatchFile (const unsigned long sig)
 {
-	for(map<int, Bindable_t*>::iterator i=Files.begin(); i != Files.end(); i++)
+	for(std::map<int, Bindable_t*>::iterator i=Files.begin(); i != Files.end(); i++)
 	{
 		if (i->second->GetBinding() == sig) {
 			UnwatchFile (i->first);
@@ -2243,7 +2303,7 @@ void EventMachine_t::_ReadInotifyEvents()
 		int current = 0;
 		while (current < returned) {
 			struct inotify_event* event = (struct inotify_event*)(buffer+current);
-			map<int, Bindable_t*>::const_iterator bindable = Files.find(event->wd);
+			std::map<int, Bindable_t*>::const_iterator bindable = Files.find(event->wd);
 			if (bindable != Files.end()) {
 				if (event->mask & (IN_MODIFY | IN_CREATE | IN_DELETE | IN_MOVE)){
 					(*EventCallback)(bindable->second->GetBinding(), EM_CONNECTION_READ, "modified", 8);
@@ -2333,9 +2393,9 @@ void EventMachine_t::_RegisterKqueueFileEvent(int fd)
 EventMachine_t::GetHeartbeatInterval
 *************************************/
 
-float EventMachine_t::GetHeartbeatInterval()
+double EventMachine_t::GetHeartbeatInterval()
 {
-	return ((float)HeartbeatInterval / 1000000);
+	return ((double)HeartbeatInterval / 1000000);
 }
 
 
@@ -2343,7 +2403,7 @@ float EventMachine_t::GetHeartbeatInterval()
 EventMachine_t::SetHeartbeatInterval
 *************************************/
 
-int EventMachine_t::SetHeartbeatInterval(float interval)
+int EventMachine_t::SetHeartbeatInterval(double interval)
 {
 	int iv = (int)(interval * 1000000);
 	if (iv > 0) {

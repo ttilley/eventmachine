@@ -45,7 +45,7 @@ PageList::~PageList()
 PageList::Front
 ***************/
 
-void PageList::Front (const char **page, int *length)
+void PageList::Front (const char **page, size_t *length)
 {
 	assert (page && length);
 
@@ -90,12 +90,12 @@ bool PageList::HasPages()
 PageList::Push
 **************/
 
-void PageList::Push (const char *buf, int size)
+void PageList::Push (const char *buf, size_t size)
 {
 	if (buf && (size > 0)) {
 		char *copy = (char*) malloc (size);
 		if (!copy)
-			throw runtime_error ("no memory in pagelist");
+			throw std::runtime_error ("no memory in pagelist");
 		memcpy (copy, buf, size);
 		Pages.push_back (Page (copy, size));
 	}

@@ -157,7 +157,7 @@ void PipeDescriptor::Read()
 		// on nonsocket" error.
 		
 
-		int r = read (sd, readbuffer, sizeof(readbuffer) - 1);
+		ssize_t r = read (sd, readbuffer, sizeof(readbuffer) - 1);
 		//cerr << "<R:" << r << ">";
 
 		if (r > 0) {
@@ -214,7 +214,7 @@ void PipeDescriptor::Write()
 			OutboundPages.pop_front();
 		}
 		else {
-			int len = sizeof(output_buffer) - nbytes;
+			size_t len = sizeof(output_buffer) - nbytes;
 			memcpy (output_buffer + nbytes, op->Buffer + op->Offset, len);
 			op->Offset += len;
 			nbytes += len;
@@ -228,12 +228,12 @@ void PipeDescriptor::Write()
 	assert (nbytes > 0);
 
 	assert (GetSocket() != INVALID_SOCKET);
-	int bytes_written = write (GetSocket(), output_buffer, nbytes);
+	ssize_t bytes_written = write (GetSocket(), output_buffer, nbytes);
 
 	if (bytes_written > 0) {
 		OutboundDataSize -= bytes_written;
 		if ((size_t)bytes_written < nbytes) {
-			int len = nbytes - bytes_written;
+			size_t len = nbytes - bytes_written;
 			char *buffer = (char*) malloc (len + 1);
 			if (!buffer)
 				throw std::runtime_error ("bad alloc throwing back data");
@@ -316,7 +316,8 @@ int PipeDescriptor::SendOutboundData (const char *data, int length)
 	char *buffer = (char *) malloc (length + 1);
 	if (!buffer)
 		throw std::runtime_error ("no allocation for outbound data");
-	memcpy (buffer, data, length);
+	if (data)
+		memcpy (buffer, data, length);
 	buffer [length] = 0;
 	OutboundPages.push_back (OutboundPage (buffer, length));
 	OutboundDataSize += length;

@@ -19,10 +19,19 @@ See the file COPYING for complete licensing information.
 
 #include "project.h"
 
-#define DEV_URANDOM "/dev/urandom"
+
+std::map<unsigned long, Bindable_t*> Bindable_t::BindingBag;
 
 
-map<unsigned long, Bindable_t*> Bindable_t::BindingBag;
+size_t Bindable_t::GetMaxBindings()
+{
+	return BindingBag.max_size();
+}
+
+size_t Bindable_t::GetLiveBindings()
+{
+	return BindingBag.size();
+}
 
 
 /********************************
@@ -92,7 +101,7 @@ STATIC: Bindable_t::GetObject
 
 Bindable_t *Bindable_t::GetObject (const unsigned long binding)
 {
-  map<unsigned long, Bindable_t*>::const_iterator i = BindingBag.find (binding);
+  std::map<unsigned long, Bindable_t*>::const_iterator i = BindingBag.find (binding);
   if (i != BindingBag.end())
     return i->second;
   else
@@ -120,5 +129,4 @@ Bindable_t::~Bindable_t()
 {
 	BindingBag.erase (Binding);
 }
-
 

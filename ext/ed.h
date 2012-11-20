@@ -87,7 +87,7 @@ class EventableDescriptor: public Bindable_t
 
 		virtual void StartProxy(const unsigned long, const unsigned long, const unsigned long);
 		virtual void StopProxy();
-		virtual unsigned long GetProxiedBytes(){ return ProxiedBytes; };
+		virtual unsigned long GetProxiedBytes(){ return ProxiedBytes; }
 		virtual void SetProxiedFrom(EventableDescriptor*, const unsigned long);
 		virtual int SendOutboundData(const char*,int){ return -1; }
 		virtual bool IsPaused(){ return bPaused; }
@@ -109,7 +109,7 @@ class EventableDescriptor: public Bindable_t
 		bool bWatchOnly;
 
 		EMCallback EventCallback;
-		void _GenericInboundDispatch(const char*, int);
+		void _GenericInboundDispatch(const char*, ssize_t);
 
 		uint64_t CreatedAt;
 		bool bCallbackUnbind;
@@ -230,7 +230,7 @@ class ConnectionDescriptor: public EventableDescriptor
 		bool bReadAttemptedAfterClose;
 		bool bWriteAttemptedAfterClose;
 
-		deque<OutboundPage> OutboundPages;
+		std::deque<OutboundPage> OutboundPages;
 		int OutboundDataSize;
 
 		#ifdef WITH_SSL
@@ -299,7 +299,7 @@ class DatagramDescriptor: public EventableDescriptor
 			struct sockaddr_in From;
 		};
 
-		deque<OutboundPage> OutboundPages;
+		std::deque<OutboundPage> OutboundPages;
 		int OutboundDataSize;
 
 		struct sockaddr_in ReturnAddress;
@@ -363,7 +363,7 @@ class PipeDescriptor: public EventableDescriptor
 	protected:
 		bool bReadAttemptedAfterClose;
 
-		deque<OutboundPage> OutboundPages;
+		std::deque<OutboundPage> OutboundPages;
 		int OutboundDataSize;
 
 		pid_t SubprocessPid;

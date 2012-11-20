@@ -20,10 +20,8 @@ See the file COPYING for complete licensing information.
 #include "project.h"
 #include "eventmachine.h"
 #include <ruby.h>
+#include "rubyisms.h"
 
-#ifndef RFLOAT_VALUE
-#define RFLOAT_VALUE(arg) RFLOAT(arg)->value
-#endif
 
 /*******
 Statics
@@ -112,12 +110,16 @@ static inline void event_callback (struct em_event* e)
 	uint64_t event_callback_start = 0;
 	uint64_t event_callback_stop = 0;
 	uint64_t event_duration = 0;
+	VALUE debug_handler;
 
 	if (rb_ivar_defined(EmModule, Intern_at_debug_handler)) {
-		debug_on = 1;
-		current_loop_time = evma_get_current_loop_time();
-		last_activity_time = evma_get_last_activity_time(signature);
-		event_callback_start = evma_get_real_time();
+		debug_handler = rb_ivar_get(EmModule, Intern_at_debug_handler);
+		if (rb_respond_to(debug_handler, Intern_call)) {
+			debug_on = 1;
+			current_loop_time = evma_get_current_loop_time();
+			last_activity_time = evma_get_last_activity_time(signature);
+			event_callback_start = evma_get_real_time();
+		}
 	}
 
 	switch (event) {
@@ -127,40 +129,40 @@ static inline void event_callback (struct em_event* e)
 			if (conn == Qnil)
 				rb_raise (EM_eConnectionNotBound, "received %lu bytes of data for unknown signature: %lu", data_num, signature);
 			rb_funcall (conn, Intern_receive_data, 1, rb_str_new (data_str, data_num));
-			goto event_callback_finish;
+			break;
 		}
 		case EM_CONNECTION_ACCEPTED:
 		{
 			rb_funcall (EmModule, Intern_event_callback, 3, ULONG2NUM(signature), INT2FIX(event), ULONG2NUM(data_num));
-			goto event_callback_finish;
+			break;
 		}
 		case EM_CONNECTION_UNBOUND:
 		{
 			rb_funcall (EmModule, Intern_event_callback, 3, ULONG2NUM(signature), INT2FIX(event), ULONG2NUM(data_num));
-			goto event_callback_finish;
+			break;
 		}
 		case EM_CONNECTION_COMPLETED:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_connection_completed, 0);
-			goto event_callback_finish;
+			break;
 		}
 		case EM_CONNECTION_NOTIFY_READABLE:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_notify_readable, 0);
-			goto event_callback_finish;
+			break;
 		}
 		case EM_CONNECTION_NOTIFY_WRITABLE:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_notify_writable, 0);
-			goto event_callback_finish;
+			break;
 		}
 		case EM_LOOPBREAK_SIGNAL:
 		{
 			rb_funcall (EmModule, Intern_run_deferred_callbacks, 0);
-			goto event_callback_finish;
+			break;
 		}
 		case EM_TIMER_FIRED:
 		{
@@ -172,14 +174,14 @@ static inline void event_callback (struct em_event* e)
 			} else {
 				rb_funcall (timer, Intern_call, 0);
 			}
-			goto event_callback_finish;
+			break;
 		}
 		#ifdef WITH_SSL
 		case EM_SSL_HANDSHAKE_COMPLETED:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_ssl_handshake_completed, 0);
-			goto event_callback_finish;
+			break;
 		}
 		case EM_SSL_VERIFY:
 		{
@@ -187,24 +189,23 @@ static inline void event_callback (struct em_event* e)
 			VALUE should_accept = rb_funcall (conn, Intern_ssl_verify_peer, 1, rb_str_new(data_str, data_num));
 			if (RTEST(should_accept))
 				evma_accept_ssl_peer (signature);
-			goto event_callback_finish;
+			break;
 		}
 		#endif
 		case EM_PROXY_TARGET_UNBOUND:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_proxy_target_unbound, 0);
-			goto event_callback_finish;
+			break;
 		}
 		case EM_PROXY_COMPLETED:
 		{
 			VALUE conn = ensure_conn(signature);
 			rb_funcall (conn, Intern_proxy_completed, 0);
-			goto event_callback_finish;
+			break;
 		}
 	}
 
-	event_callback_finish:
 
 	if (debug_on) {
 		event_callback_stop = evma_get_real_time();
@@ -213,7 +214,6 @@ static inline void event_callback (struct em_event* e)
 		VALUE current_loop_time_value = Qnil;
 		VALUE last_activity_time_value = Qnil;
 		VALUE connection = rb_hash_aref(EmConnsHash, ULONG2NUM(signature));
-		VALUE debug_handler = rb_ivar_get(EmModule, Intern_at_debug_handler);
 
 #		ifndef HAVE_RB_TIME_NEW
 		static VALUE cTime = rb_path2class("Time");
@@ -514,7 +514,7 @@ t_set_comm_inactivity_timeout
 
 static VALUE t_set_comm_inactivity_timeout (VALUE self, VALUE signature, VALUE timeout)
 {
-	float ti = RFLOAT_VALUE(timeout);
+	double ti = RFLOAT_VALUE(timeout);
 	if (evma_set_comm_inactivity_timeout(NUM2ULONG(signature), ti)) {
 		return Qtrue;
 	}
@@ -536,7 +536,7 @@ t_set_pending_connect_timeout
 
 static VALUE t_set_pending_connect_timeout (VALUE self, VALUE signature, VALUE timeout)
 {
-	float ti = RFLOAT_VALUE(timeout);
+	double ti = RFLOAT_VALUE(timeout);
 	if (evma_set_pending_connect_timeout(NUM2ULONG(signature), ti)) {
 		return Qtrue;
 	}
@@ -750,7 +750,8 @@ t_pause
 
 static VALUE t_pause (VALUE self, VALUE signature)
 {
-	return evma_pause(NUM2ULONG (signature)) ? Qtrue : Qfalse;
+	bool paused = evma_pause(NUM2ULONG (signature));
+	return paused ? Qtrue : Qfalse;
 }
 
 /********
@@ -885,7 +886,7 @@ static VALUE t_invoke_popen (VALUE self, VALUE cmd)
 {
 	// 1.8.7+
 	#ifdef RARRAY_LEN
-		int len = RARRAY_LEN(cmd);
+		int len = (int)RARRAY_LEN(cmd);
 	#else
 		int len = RARRAY (cmd)->len;
 	#endif
@@ -1101,8 +1102,8 @@ t_set_rlimit_nofile
 
 static VALUE t_set_rlimit_nofile (VALUE self, VALUE arg)
 {
-	arg = (NIL_P(arg)) ? -1 : NUM2INT (arg);
-	return INT2NUM (evma_set_rlimit_nofile (arg));
+	int iarg = (NIL_P(arg)) ? -1 : NUM2INT (arg);
+	return ULONG2NUM (evma_set_rlimit_nofile (iarg));
 }
 
 /***************************
@@ -1207,7 +1208,7 @@ static VALUE t_get_idle_time (VALUE self, VALUE from)
 				return ULONG2NUM(0);
 			else {
 				uint64_t diff = current_time - time;
-				float seconds = diff / (1000.0*1000.0);
+				double seconds = diff / (1000.0*1000.0);
 				return rb_float_new(seconds);
 			}
 			return Qnil;
@@ -1234,10 +1235,21 @@ t_set_heartbeat_interval
 
 static VALUE t_set_heartbeat_interval (VALUE self, VALUE interval)
 {
-	float iv = RFLOAT_VALUE(interval);
+	double iv = RFLOAT_VALUE(interval);
 	if (evma_set_heartbeat_interval(iv))
 		return Qtrue;
 	return Qfalse;
+}
+
+
+static VALUE t_get_max_bindings (void)
+{
+	return SIZET2NUM(evma_get_max_bindings());
+}
+
+static VALUE t_get_live_bindings (void)
+{
+	return SIZET2NUM(evma_get_live_bindings());
 }
 
 
@@ -1248,8 +1260,8 @@ Init_rubyeventmachine
 extern "C" void Init_rubyeventmachine()
 {
 	// Lookup Process::Status for get_subprocess_status
-	VALUE rb_mProcess = rb_const_get(rb_cObject, rb_intern("Process"));
-	rb_cProcStatus = rb_const_get(rb_mProcess, rb_intern("Status"));
+	VALUE _rb_mProcess = rb_const_get(rb_cObject, rb_intern("Process"));
+	rb_cProcStatus = rb_const_get(_rb_mProcess, rb_intern("Status"));
 
 	// Tuck away some symbol values so we don't have to look 'em up every time we need 'em.
 	Intern_at_signature = rb_intern ("@signature");
@@ -1363,6 +1375,9 @@ extern "C" void Init_rubyeventmachine()
 	rb_define_module_function (EmModule, "kqueue?", (VALUE(*)(...))t__kqueue_p, 0);
 
 	rb_define_module_function (EmModule, "ssl?", (VALUE(*)(...))t__ssl_p, 0);
+
+	rb_define_module_function (EmModule, "max_bindings", (VALUE(*)(ANYARGS))t_get_max_bindings, 0);
+	rb_define_module_function (EmModule, "live_bindings", (VALUE(*)(ANYARGS))t_get_live_bindings, 0);
 
 	rb_define_method (EmConnection, "get_outbound_data_size", (VALUE(*)(...))conn_get_outbound_data_size, 0);
 	rb_define_method (EmConnection, "associate_callback_target", (VALUE(*)(...))conn_associate_callback_target, 1);

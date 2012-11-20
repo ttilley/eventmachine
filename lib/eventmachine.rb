@@ -1313,9 +1313,11 @@ module EventMachine
   #
   # @param [#call] cb Global catch-all errback
   def self.error_handler cb = nil, &blk
-    if cb or blk
-      @error_handler = cb || blk
-    elsif instance_variable_defined? :@error_handler
+    if block_given?
+      @error_handler = blk
+    elsif cb.respond_to?(:call)
+      @error_handler = cb
+    else
       remove_instance_variable :@error_handler
     end
   end
@@ -1327,10 +1329,12 @@ module EventMachine
   #                    event_duration_in_ms, data|
   #    puts event_type
   # }
-  def self.debug_handler(cb = nil, &blk)
-    if cb || blk
-      @debug_handler = cb || blk
-    elsif instance_variable_defined? :@debug_handler
+  def self.debug_handler cb = nil, &blk
+    if block_given?
+      @debug_handler = blk
+    elsif cb.respond_to?(:call)
+      @debug_handler = cb
+    else
       remove_instance_variable :@debug_handler
     end
   end

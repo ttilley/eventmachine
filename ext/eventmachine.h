@@ -43,11 +43,11 @@ extern "C" {
 	void evma_initialize_library (EMCallback);
 	void evma_run_machine();
 	void evma_release_library();
-	const unsigned long evma_install_oneshot_timer (int seconds);
-	const unsigned long evma_connect_to_server (const char *bind_addr, int bind_port, const char *server, int port);
-	const unsigned long evma_connect_to_unix_server (const char *server);
+	unsigned long evma_install_oneshot_timer (int seconds);
+	unsigned long evma_connect_to_server (const char *bind_addr, int bind_port, const char *server, int port);
+	unsigned long evma_connect_to_unix_server (const char *server);
 
-	const unsigned long evma_attach_fd (int file_descriptor, int watch_mode);
+	unsigned long evma_attach_fd (int file_descriptor, int watch_mode);
 	int evma_detach_fd (const unsigned long binding);
 	int evma_get_file_descriptor (const unsigned long binding);
 	int evma_is_notify_readable (const unsigned long binding);
@@ -62,10 +62,10 @@ extern "C" {
     int evma_num_close_scheduled();
 
 	void evma_stop_tcp_server (const unsigned long signature);
-	const unsigned long evma_create_tcp_server (const char *address, int port);
-	const unsigned long evma_create_unix_domain_server (const char *filename);
-	const unsigned long evma_open_datagram_socket (const char *server, int port);
-	const unsigned long evma_open_keyboard();
+	unsigned long evma_create_tcp_server (const char *address, int port);
+	unsigned long evma_create_unix_domain_server (const char *filename);
+	unsigned long evma_open_datagram_socket (const char *server, int port);
+	unsigned long evma_open_keyboard();
 	void evma_set_tls_parms (const unsigned long binding, const char *privatekey_filename, const char *certchain_filenane, int verify_peer);
 	void evma_start_tls (const unsigned long binding);
 
@@ -81,10 +81,10 @@ extern "C" {
 	int evma_get_connection_count();
 	int evma_send_data_to_connection (const unsigned long binding, const char *data, int data_length);
 	int evma_send_datagram (const unsigned long binding, const char *data, int data_length, const char *address, int port);
-	float evma_get_comm_inactivity_timeout (const unsigned long binding);
-	int evma_set_comm_inactivity_timeout (const unsigned long binding, float value);
-	float evma_get_pending_connect_timeout (const unsigned long binding);
-	int evma_set_pending_connect_timeout (const unsigned long binding, float value);
+	double evma_get_comm_inactivity_timeout (const unsigned long binding);
+	int evma_set_comm_inactivity_timeout (const unsigned long binding, double value);
+	double evma_get_pending_connect_timeout (const unsigned long binding);
+	int evma_set_pending_connect_timeout (const unsigned long binding, double value);
 	int evma_get_outbound_data_size (const unsigned long binding);
 	uint64_t evma_get_last_activity_time (const unsigned long);
 	int evma_send_file_data_to_connection (const unsigned long binding, const char *filename);
@@ -97,15 +97,15 @@ extern "C" {
 	void evma_set_max_timer_count (int);
 	void evma_setuid_string (const char *username);
 	void evma_stop_machine();
-	float evma_get_heartbeat_interval();
-	int evma_set_heartbeat_interval(float);
+	double evma_get_heartbeat_interval();
+	int evma_set_heartbeat_interval(double);
 
-	const unsigned long evma_popen (char * const*cmd_strings);
+	unsigned long evma_popen (char * const*cmd_strings);
 
-	const unsigned long evma_watch_filename (const char *fname);
+	unsigned long evma_watch_filename (const char *fname);
 	void evma_unwatch_filename (const unsigned long);
 
-	const unsigned long evma_watch_pid (int);
+	unsigned long evma_watch_pid (int);
 	void evma_unwatch_pid (const unsigned long);
 
 	void evma_start_proxy(const unsigned long, const unsigned long, const unsigned long, const unsigned long);
@@ -118,7 +118,11 @@ extern "C" {
 	void evma_set_kqueue (int use);
 
 	uint64_t evma_get_current_loop_time();
-  uint64_t evma_get_real_time();
+	uint64_t evma_get_real_time();
+
+	size_t evma_get_max_bindings();
+	size_t evma_get_live_bindings();
+
 #if __cplusplus
 }
 #endif

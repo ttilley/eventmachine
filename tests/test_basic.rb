@@ -170,7 +170,7 @@ class TestBasic < Test::Unit::TestCase
     end
     assert x
   end
-  
+
   def test_schedule_from_thread
     x = false
     EM.run do
@@ -192,14 +192,14 @@ class TestBasic < Test::Unit::TestCase
   else
     warn "EM.set_heartbeat_interval not implemented, skipping a test in #{__FILE__}"
   end
-  
+
   module PostInitRaiser
     ERR = Class.new(StandardError)
     def post_init
       raise ERR
     end
   end
-  
+
   def test_bubble_errors_from_post_init
     assert_raises(PostInitRaiser::ERR) do
       EM.run do
@@ -208,14 +208,14 @@ class TestBasic < Test::Unit::TestCase
       end
     end
   end
-  
+
   module InitializeRaiser
     ERR = Class.new(StandardError)
     def initialize
       raise ERR
     end
   end
-  
+
   def test_bubble_errors_from_initialize
     assert_raises(InitializeRaiser::ERR) do
       EM.run do
@@ -224,7 +224,7 @@ class TestBasic < Test::Unit::TestCase
       end
     end
   end
-  
+
   def test_schedule_close
     localhost, port = '127.0.0.1', 9000
     timer_ran = false
@@ -290,5 +290,7 @@ class TestBasic < Test::Unit::TestCase
 
     assert_equal 1, errors.size
     assert_equal [:first, :second], ticks
+  ensure
+    EM.error_handler(nil)
   end
 end

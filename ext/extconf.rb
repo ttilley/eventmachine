@@ -1,5 +1,12 @@
-require 'fileutils'
 require 'mkmf'
+
+
+RBCONFIG = RbConfig::CONFIG
+CONFIG['CXXFLAGS'] ||= RBCONFIG['CXXFLAGS'] ||= '-std=gnu++98'
+$CXXFLAGS = CONFIG['CXXFLAGS'] = with_config("cxxflags", arg_config("CXXFLAGS", CONFIG['CXXFLAGS'])).dup
+$top_srcdir ||= $hdrdir
+$arch_hdrdir ||= $hdrdir + "/$(arch)"
+
 
 def check_libs libs = [], fatal = false
   libs.all? { |lib| have_library(lib) || (abort("could not find library: #{lib}") if fatal) }
@@ -12,6 +19,59 @@ end
 def add_define(name)
   $defs.push("-D#{name}")
 end
+
+
+def try_cflags(flags)
+  conf = RbConfig::CONFIG.merge('hdrdir' => $hdrdir.quote, 'srcdir' => $srcdir.quote,
+                                'arch_hdrdir' => $arch_hdrdir.quote,
+                                'top_srcdir' => $top_srcdir.quote)
+  cmd = RbConfig::expand("$(CC) #$INCFLAGS #$CPPFLAGS #$ARCH_FLAG -Werror #{flags} -c #{CONFTEST_C}", conf)
+  try_do('int main() {return 0;}', cmd)
+ensure
+  rm_f "conftest*"
+end
+
+def try_cxxflags(flags)
+  conf = RbConfig::CONFIG.merge('hdrdir' => $hdrdir.quote, 'srcdir' => $srcdir.quote,
+                                'arch_hdrdir' => $arch_hdrdir.quote,
+                                'top_srcdir' => $top_srcdir.quote)
+  cmd = RbConfig::expand("$(CXX) -x c++ #$INCFLAGS #$CPPFLAGS #$ARCH_FLAG -Werror #{flags} -c #{CONFTEST_C}", conf)
+  try_do('int main() {return 0;}', cmd)
+ensure
+  rm_f "conftest*"
+end
+
+def with_cflags(flags)
+  checking_for checking_message(flags, 'usable CFLAGS') do
+    if try_cflags(flags)
+      $CFLAGS << " #{flags}"
+      true
+    else
+      false
+    end
+  end
+end
+
+def with_cxxflags(flags)
+  checking_for checking_message(flags, 'usable CXXFLAGS') do
+    if try_cxxflags(flags)
+      $CXXFLAGS << " #{flags}"
+      true
+    else
+      false
+    end
+  end
+end
+
+
+with_cflags '-Weverything'
+with_cflags '-Wall'
+with_cflags '-Wextra'
+with_cflags '-Wno-long-long'
+with_cxxflags '-Weffc++'
+with_cxxflags '-Wabi'
+with_cxxflags '-Wc++11-compat'
+
 
 ##
 # OpenSSL:
@@ -40,7 +100,7 @@ def manual_ssl_config
 end
 
 if ENV['CROSS_COMPILING']
-  openssl_version = ENV.fetch("OPENSSL_VERSION", "1.0.0j")
+  openssl_version = ENV.fetch("OPENSSL_VERSION", "1.0.1c")
   openssl_dir = File.expand_path("~/.rake-compiler/builds/openssl-#{openssl_version}/")
   if File.exists?(openssl_dir)
     FileUtils.mkdir_p Dir.pwd+"/openssl/"
@@ -64,28 +124,49 @@ else
   add_define "WITHOUT_SSL"
 end
 
+
 add_define 'BUILD_FOR_RUBY'
+add_define 'HAVE_EPOLL' if have_func('epoll_create', 'sys/epoll.h')
+add_define 'HAVE_KQUEUE' if have_header("sys/event.h") and have_header("sys/queue.h")
+add_define 'HAVE_INOTIFY' if inotify = have_func('inotify_init', 'sys/inotify.h')
+add_define 'HAVE_OLD_INOTIFY' if !inotify && have_macro('__NR_inotify_init', 'sys/syscall.h')
 add_define 'HAVE_RBTRAP' if have_var('rb_trap_immediate', ['ruby.h', 'rubysig.h'])
-add_define "HAVE_TBR" if have_func('rb_thread_blocking_region')# and have_macro('RUBY_UBF_IO', 'ruby.h')
 add_define "HAVE_INOTIFY" if inotify = have_func('inotify_init', 'sys/inotify.h')
 add_define "HAVE_OLD_INOTIFY" if !inotify && have_macro('__NR_inotify_init', 'sys/syscall.h')
+add_define "HAVE_KQUEUE" if have_header("sys/event.h") and have_header("sys/queue.h")
+add_define 'HAVE_EPOLL' if have_func('epoll_create', 'sys/epoll.h')
+add_define 'HAVE_TBR' if have_func('rb_thread_blocking_region')
+add_define 'HAVE_WITHOUT_GVL' if have_func('rb_thread_call_without_gvl')
 add_define 'HAVE_WRITEV' if have_func('writev', 'sys/uio.h')
 
+have_func('rb_hash_dup')
+have_func('rb_thread_call_with_gvl')
 have_func('rb_thread_check_ints')
 have_func('rb_time_new')
+have_func('rb_wait_for_single_fd')
+have_func('ruby_native_thread_p')
+have_type('rb_blocking_function_t')
+have_type('rb_unblock_function_t')
+
+if defined?(RUBY_ENGINE) && RUBY_ENGINE =~ /rbx/
+  add_define 'HAVE_RB_THREAD_BLOCKING_REGION'
+  add_define 'HAVE_TBR'
+  add_define 'HAVE_RB_THREAD_CALL_WITH_GVL'
+  add_define 'HAVE_RB_TIME_NEW'
+  add_define 'HAVE_TYPE_RB_BLOCKING_FUNCTION_T'
+  add_define 'HAVE_TYPE_RB_UNBLOCK_FUNCTION_T'
+end
 
 # Minor platform details between *nix and Windows:
 
 if RUBY_PLATFORM =~ /(mswin|mingw|bccwin)/
   GNU_CHAIN = ENV['CROSS_COMPILING'] || $1 == 'mingw'
   OS_WIN32 = true
-  add_define "OS_WIN32"
+  add_define 'OS_WIN32'
 else
   GNU_CHAIN = true
   OS_UNIX = true
   add_define 'OS_UNIX'
-
-  add_define "HAVE_KQUEUE" if have_header("sys/event.h") and have_header("sys/queue.h")
 end
 
 # Adjust number of file descriptors (FD) on Windows
@@ -141,7 +222,6 @@ when /darwin/
   CONFIG['LDSHARED'] = "$(CXX) " + CONFIG['LDSHARED'].split[1..-1].join(' ')
 
 when /linux/
-  add_define 'HAVE_EPOLL' if have_func('epoll_create', 'sys/epoll.h')
 
   # on Unix we need a g++ link, not gcc.
   CONFIG['LDSHARED'] = "$(CXX) -shared"
@@ -173,4 +253,11 @@ add_define 'HAVE_MAKE_PAIR' if try_link(<<SRC, '-lstdc++')
 SRC
 TRY_LINK.sub!('$(CXX)', '$(CC)')
 
+
+$defs.sort!
+$defs.uniq!
+
+
+# create_header
 create_makefile "rubyeventmachine"
+
