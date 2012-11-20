@@ -32,6 +32,9 @@ static EventMachine_t *EventMachine;
 static int bUseEpoll = 0;
 static int bUseKqueue = 0;
 
+extern "C" void ensure_eventmachine (const char *caller);
+
+
 extern "C" void ensure_eventmachine (const char *caller = "unknown caller")
 {
 	if (!EventMachine) {
@@ -93,7 +96,7 @@ extern "C" void evma_run_machine()
 evma_install_oneshot_timer
 **************************/
 
-extern "C" const unsigned long evma_install_oneshot_timer (int seconds)
+extern "C" unsigned long evma_install_oneshot_timer (int seconds)
 {
 	ensure_eventmachine("evma_install_oneshot_timer");
 	return EventMachine->InstallOneshotTimer (seconds);
@@ -104,7 +107,7 @@ extern "C" const unsigned long evma_install_oneshot_timer (int seconds)
 evma_connect_to_server
 **********************/
 
-extern "C" const unsigned long evma_connect_to_server (const char *bind_addr, int bind_port, const char *server, int port)
+extern "C" unsigned long evma_connect_to_server (const char *bind_addr, int bind_port, const char *server, int port)
 {
 	ensure_eventmachine("evma_connect_to_server");
 	return EventMachine->ConnectToServer (bind_addr, bind_port, server, port);
@@ -114,7 +117,7 @@ extern "C" const unsigned long evma_connect_to_server (const char *bind_addr, in
 evma_connect_to_unix_server
 ***************************/
 
-extern "C" const unsigned long evma_connect_to_unix_server (const char *server)
+extern "C" unsigned long evma_connect_to_unix_server (const char *server)
 {
 	ensure_eventmachine("evma_connect_to_unix_server");
 	return EventMachine->ConnectToUnixServer (server);
@@ -124,7 +127,7 @@ extern "C" const unsigned long evma_connect_to_unix_server (const char *server)
 evma_attach_fd
 **************/
 
-extern "C" const unsigned long evma_attach_fd (int file_descriptor, int watch_mode)
+extern "C" unsigned long evma_attach_fd (int file_descriptor, int watch_mode)
 {
 	ensure_eventmachine("evma_attach_fd");
 	return EventMachine->AttachFD (file_descriptor, watch_mode ? true : false);
@@ -153,7 +156,7 @@ extern "C" int evma_detach_fd (const unsigned long binding)
 evma_attach_server_fd
 **********************/
 
-extern "C" const unsigned long evma_attach_server_fd (int file_descriptor)
+extern "C" unsigned long evma_attach_server_fd (int file_descriptor)
 {
    ensure_eventmachine("evma_attach_server_fd");
    return EventMachine->AttachServerFD (file_descriptor);
@@ -287,7 +290,7 @@ extern "C" int evma_num_close_scheduled ()
 evma_create_tcp_server
 **********************/
 
-extern "C" const unsigned long evma_create_tcp_server (const char *address, int port)
+extern "C" unsigned long evma_create_tcp_server (const char *address, int port)
 {
 	ensure_eventmachine("evma_create_tcp_server");
 	return EventMachine->CreateTcpServer (address, port);
@@ -297,7 +300,7 @@ extern "C" const unsigned long evma_create_tcp_server (const char *address, int 
 evma_create_unix_domain_server
 ******************************/
 
-extern "C" const unsigned long evma_create_unix_domain_server (const char *filename)
+extern "C" unsigned long evma_create_unix_domain_server (const char *filename)
 {
 	ensure_eventmachine("evma_create_unix_domain_server");
 	return EventMachine->CreateUnixDomainServer (filename);
@@ -307,7 +310,7 @@ extern "C" const unsigned long evma_create_unix_domain_server (const char *filen
 evma_open_datagram_socket
 *************************/
 
-extern "C" const unsigned long evma_open_datagram_socket (const char *address, int port)
+extern "C" unsigned long evma_open_datagram_socket (const char *address, int port)
 {
 	ensure_eventmachine("evma_open_datagram_socket");
 	return EventMachine->OpenDatagramSocket (address, port);
@@ -317,7 +320,7 @@ extern "C" const unsigned long evma_open_datagram_socket (const char *address, i
 evma_open_keyboard
 ******************/
 
-extern "C" const unsigned long evma_open_keyboard()
+extern "C" unsigned long evma_open_keyboard()
 {
 	ensure_eventmachine("evma_open_keyboard");
 	return EventMachine->OpenKeyboard();
@@ -327,7 +330,7 @@ extern "C" const unsigned long evma_open_keyboard()
 evma_watch_filename
 *******************/
 
-extern "C" const unsigned long evma_watch_filename (const char *fname)
+extern "C" unsigned long evma_watch_filename (const char *fname)
 {
 	ensure_eventmachine("evma_watch_filename");
 	return EventMachine->WatchFile(fname);
@@ -347,7 +350,7 @@ extern "C" void evma_unwatch_filename (const unsigned long sig)
 evma_watch_pid
 **************/
 
-extern "C" const unsigned long evma_watch_pid (int pid)
+extern "C" unsigned long evma_watch_pid (int pid)
 {
 	ensure_eventmachine("evma_watch_pid");
 	return EventMachine->WatchPid(pid);
@@ -584,7 +587,7 @@ extern "C" void evma_signal_loopbreak()
 evma_get_comm_inactivity_timeout
 ********************************/
 
-extern "C" float evma_get_comm_inactivity_timeout (const unsigned long binding)
+extern "C" double evma_get_comm_inactivity_timeout (const unsigned long binding)
 {
 	ensure_eventmachine("evma_get_comm_inactivity_timeout");
 	EventableDescriptor *ed = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (binding));
@@ -599,7 +602,7 @@ extern "C" float evma_get_comm_inactivity_timeout (const unsigned long binding)
 evma_set_comm_inactivity_timeout
 ********************************/
 
-extern "C" int evma_set_comm_inactivity_timeout (const unsigned long binding, float value)
+extern "C" int evma_set_comm_inactivity_timeout (const unsigned long binding, double value)
 {
 	ensure_eventmachine("evma_set_comm_inactivity_timeout");
 	EventableDescriptor *ed = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (binding));
@@ -615,7 +618,7 @@ extern "C" int evma_set_comm_inactivity_timeout (const unsigned long binding, fl
 evma_get_pending_connect_timeout
 ********************************/
 
-extern "C" float evma_get_pending_connect_timeout (const unsigned long binding)
+extern "C" double evma_get_pending_connect_timeout (const unsigned long binding)
 {
 	ensure_eventmachine("evma_get_pending_connect_timeout");
 	EventableDescriptor *ed = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (binding));
@@ -631,7 +634,7 @@ extern "C" float evma_get_pending_connect_timeout (const unsigned long binding)
 evma_set_pending_connect_timeout
 ********************************/
 
-extern "C" int evma_set_pending_connect_timeout (const unsigned long binding, float value)
+extern "C" int evma_set_pending_connect_timeout (const unsigned long binding, double value)
 {
 	ensure_eventmachine("evma_set_pending_connect_timeout");
 	EventableDescriptor *ed = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (binding));
@@ -669,7 +672,7 @@ extern "C" void evma_setuid_string (const char *username)
 evma_popen
 **********/
 
-extern "C" const unsigned long evma_popen (char * const*cmd_strings)
+extern "C" unsigned long evma_popen (char * const*cmd_strings)
 {
 	ensure_eventmachine("evma_popen");
 	return EventMachine->Socketpair (cmd_strings);
@@ -741,7 +744,7 @@ extern "C" int evma_send_file_data_to_connection (const unsigned long binding, c
 	 */
 
 	char data[32*1024];
-	int r;
+	ssize_t r;
 
 	ensure_eventmachine("evma_send_file_data_to_connection");
 
@@ -769,13 +772,13 @@ extern "C" int evma_send_file_data_to_connection (const unsigned long binding, c
 	}
 
 
-	r = read (Fd, data, filesize);
+	r = read (Fd, data, (size_t)filesize);
 	if (r != filesize) {
 		int e = errno;
 		close (Fd);
 		return e;
 	}
-	evma_send_data_to_connection (binding, data, r);
+	evma_send_data_to_connection (binding, data, (int)r);
 	close (Fd);
 
 	return 0;
@@ -841,7 +844,7 @@ extern "C" uint64_t evma_get_last_activity_time(const unsigned long from)
 evma_get_heartbeat_interval
 ****************************/
 
-extern "C" float evma_get_heartbeat_interval()
+extern "C" double evma_get_heartbeat_interval()
 {
 	ensure_eventmachine("evma_get_heartbeat_interval");
 	return EventMachine->GetHeartbeatInterval();
@@ -852,7 +855,7 @@ extern "C" float evma_get_heartbeat_interval()
 evma_set_heartbeat_interval
 ****************************/
 
-extern "C" int evma_set_heartbeat_interval(float interval)
+extern "C" int evma_set_heartbeat_interval(double interval)
 {
 	ensure_eventmachine("evma_set_heartbeat_interval");
 	return EventMachine->SetHeartbeatInterval(interval);
@@ -879,3 +882,18 @@ extern "C" uint64_t evma_get_real_time()
 	ensure_eventmachine("evma_get_real_time");
 	return EventMachine->GetRealTime();
 }
+
+
+extern "C" size_t evma_get_max_bindings()
+{
+	ensure_eventmachine("evma_get_max_bindings");
+	return Bindable_t::GetMaxBindings();
+}
+
+extern "C" size_t evma_get_live_bindings()
+{
+	ensure_eventmachine("evma_get_live_bindings");
+	return Bindable_t::GetLiveBindings();
+}
+
+

@@ -20,38 +20,10 @@ See the file COPYING for complete licensing information.
 #ifndef __EventMachine__H_
 #define __EventMachine__H_
 
+
 #ifdef BUILD_FOR_RUBY
-  #include <ruby.h>
+  #include "rubyisms.h"
   #define EmSelect rb_thread_select
-
-  #if defined(HAVE_RBTRAP)
-    #include <rubysig.h>
-  #elif defined(HAVE_RB_THREAD_CHECK_INTS)
-    extern "C" {
-      void rb_enable_interrupt(void);
-      void rb_disable_interrupt(void);
-    }
-
-    #define TRAP_BEG rb_enable_interrupt()
-    #define TRAP_END do { rb_disable_interrupt(); rb_thread_check_ints(); } while(0)
-  #else
-    #define TRAP_BEG
-    #define TRAP_END
-  #endif
-
-  // 1.9.0 compat
-  #ifndef RUBY_UBF_IO
-    #define RUBY_UBF_IO RB_UBF_DFL
-  #endif
-  #ifndef RSTRING_PTR
-    #define RSTRING_PTR(str) RSTRING(str)->ptr
-  #endif
-  #ifndef RSTRING_LEN
-    #define RSTRING_LEN(str) RSTRING(str)->len
-  #endif
-  #ifndef RSTRING_LENINT
-    #define RSTRING_LENINT(str) RSTRING_LEN(str)
-  #endif
 #else
   #define EmSelect select
 #endif
@@ -80,24 +52,24 @@ class EventMachine_t
 		void Run();
 		void ScheduleHalt();
 		void SignalLoopBreaker();
-		const unsigned long InstallOneshotTimer (int);
-		const unsigned long ConnectToServer (const char *, int, const char *, int);
-		const unsigned long ConnectToUnixServer (const char *);
+		unsigned long InstallOneshotTimer (int);
+		unsigned long ConnectToServer (const char *, int, const char *, int);
+		unsigned long ConnectToUnixServer (const char *);
 
-		const unsigned long CreateTcpServer (const char *, int);
-		const unsigned long OpenDatagramSocket (const char *, int);
-		const unsigned long CreateUnixDomainServer (const char*);
-		const unsigned long OpenKeyboard();
+		unsigned long CreateTcpServer (const char *, int);
+		unsigned long OpenDatagramSocket (const char *, int);
+		unsigned long CreateUnixDomainServer (const char*);
+		unsigned long OpenKeyboard();
 		//const char *Popen (const char*, const char*);
-		const unsigned long Socketpair (char* const*);
+		unsigned long Socketpair (char* const*);
 
 		void Add (EventableDescriptor*);
 		void Modify (EventableDescriptor*);
 		void Deregister (EventableDescriptor*);
 
-		const unsigned long AttachFD (int, bool);
+		unsigned long AttachFD (int, bool);
 		int DetachFD (EventableDescriptor*);
-		const unsigned long AttachServerFD (int);
+		unsigned long AttachServerFD (int);
 
 		void ArmKqueueWriter (EventableDescriptor*);
 		void ArmKqueueReader (EventableDescriptor*);
@@ -110,10 +82,10 @@ class EventMachine_t
 		int SubprocessExitStatus;
 
 		int GetConnectionCount();
-		float GetHeartbeatInterval();
-		int SetHeartbeatInterval(float);
+		double GetHeartbeatInterval();
+		int SetHeartbeatInterval(double);
 
-		const unsigned long WatchFile (const char*);
+		unsigned long WatchFile (const char*);
 		void UnwatchFile (int);
 		void UnwatchFile (const unsigned long);
 
@@ -122,7 +94,7 @@ class EventMachine_t
 		void _RegisterKqueueFileEvent(int);
 		#endif
 
-		const unsigned long WatchPid (int);
+		unsigned long WatchPid (int);
 		void UnwatchPid (int);
 		void UnwatchPid (const unsigned long);
 
@@ -178,13 +150,13 @@ class EventMachine_t
 		class Timer_t: public Bindable_t {
 		};
 
-		multimap<uint64_t, Timer_t> Timers;
-		multimap<uint64_t, EventableDescriptor*> Heartbeats;
-		map<int, Bindable_t*> Files;
-		map<int, Bindable_t*> Pids;
-		vector<EventableDescriptor*> Descriptors;
-		vector<EventableDescriptor*> NewDescriptors;
-		set<EventableDescriptor*> ModifiedDescriptors;
+		std::multimap<uint64_t, Timer_t> Timers;
+		std::multimap<uint64_t, EventableDescriptor*> Heartbeats;
+		std::map<int, Bindable_t*> Files;
+		std::map<int, Bindable_t*> Pids;
+		std::vector<EventableDescriptor*> Descriptors;
+		std::vector<EventableDescriptor*> NewDescriptors;
+		std::set<EventableDescriptor*> ModifiedDescriptors;
 
 		uint64_t NextHeartbeatTime;
 

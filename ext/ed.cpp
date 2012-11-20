@@ -114,7 +114,7 @@ EventableDescriptor::~EventableDescriptor()
 		MyEventMachine->ClearHeartbeat(NextHeartbeat, this);
 	if (EventCallback && bCallbackUnbind)
 		(*EventCallback)(GetBinding(), EM_CONNECTION_UNBOUND, NULL, UnbindReasonCode);
-	if (ProxiedFrom) {
+	if (EventCallback && ProxiedFrom) {
 		(*EventCallback)(ProxiedFrom->GetBinding(), EM_PROXY_TARGET_UNBOUND, NULL, 0);
 		ProxiedFrom->StopProxy();
 	}
@@ -290,13 +290,13 @@ void EventableDescriptor::SetProxiedFrom(EventableDescriptor *from, const unsign
 EventableDescriptor::_GenericInboundDispatch
 ********************************************/
 
-void EventableDescriptor::_GenericInboundDispatch(const char *buf, int size)
+void EventableDescriptor::_GenericInboundDispatch(const char *buf, ssize_t size)
 {
 	assert(EventCallback);
 
 	if (ProxyTarget) {
 		if (BytesToProxy > 0) {
-			unsigned long proxied = min(BytesToProxy, (unsigned long) size);
+			unsigned long proxied = std::min(BytesToProxy, (unsigned long)size);
 			ProxyTarget->SendOutboundData(buf, proxied);
 			ProxiedBytes += (unsigned long) proxied;
 			BytesToProxy -= proxied;
@@ -615,7 +615,8 @@ int ConnectionDescriptor::_SendRawOutboundData (const char *data, int length)
 	if (!buffer)
 		throw std::runtime_error ("no allocation for outbound data");
 
-	memcpy (buffer, data, length);
+	if (data)
+		memcpy (buffer, data, length);
 	buffer [length] = 0;
 	OutboundPages.push_back (OutboundPage (buffer, length));
 	OutboundDataSize += length;
@@ -767,7 +768,7 @@ void ConnectionDescriptor::Read()
 		// to user code.
 		
 
-		int r = read (sd, readbuffer, sizeof(readbuffer) - 1);
+		ssize_t r = read (sd, readbuffer, sizeof(readbuffer) - 1);
 		int e = errno;
 		//cerr << "<R:" << r << ">";
 
@@ -1029,9 +1030,9 @@ void ConnectionDescriptor::_WriteOutboundData()
 
 	assert (GetSocket() != INVALID_SOCKET);
 	#ifdef HAVE_WRITEV
-	int bytes_written = writev (GetSocket(), iov, iovcnt);
+	ssize_t bytes_written = writev (GetSocket(), iov, iovcnt);
 	#else
-	int bytes_written = write (GetSocket(), output_buffer, nbytes);
+	ssize_t bytes_written = write (GetSocket(), output_buffer, nbytes);
 	#endif
 
 	bool err = false;
@@ -1049,8 +1050,8 @@ void ConnectionDescriptor::_WriteOutboundData()
 
 	#ifdef HAVE_WRITEV
 	if (!err) {
-		unsigned int sent = bytes_written;
-		deque<OutboundPage>::iterator op = OutboundPages.begin();
+		ssize_t sent = bytes_written;
+		std::deque<OutboundPage>::iterator op = OutboundPages.begin();
 
 		for (int i = 0; i < iovcnt; i++) {
 			if (iov[i].iov_len <= sent) {
@@ -1598,7 +1599,7 @@ void DatagramDescriptor::Read()
 		socklen_t slen = sizeof (sin);
 		memset (&sin, 0, slen);
 
-		int r = recvfrom (sd, readbuffer, sizeof(readbuffer) - 1, 0, (struct sockaddr*)&sin, &slen);
+		ssize_t r = recvfrom (sd, readbuffer, sizeof(readbuffer) - 1, 0, (struct sockaddr*)&sin, &slen);
 		//cerr << "<R:" << r << ">";
 
 		// In UDP, a zero-length packet is perfectly legal.
@@ -1668,7 +1669,7 @@ void DatagramDescriptor::Write()
 		OutboundPage *op = &(OutboundPages[0]);
 
 		// The nasty cast to (char*) is needed because Windows is brain-dead.
-		int s = sendto (sd, (char*)op->Buffer, op->Length, 0,
+		ssize_t s = sendto (sd, (char*)op->Buffer, op->Length, 0,
                                 (struct sockaddr*)&(op->From),
                                 (op->From.sin6_family == AF_INET6 ?
                                  sizeof (struct sockaddr_in6) : sizeof (struct sockaddr_in)));
@@ -1767,7 +1768,8 @@ int DatagramDescriptor::SendOutboundData (const char *data, int length)
 	char *buffer = (char *) malloc (length + 1);
 	if (!buffer)
 		throw std::runtime_error ("no allocation for outbound data");
-	memcpy (buffer, data, length);
+	if (data)
+		memcpy (buffer, data, length);
 	buffer [length] = 0;
 	OutboundPages.push_back (OutboundPage (buffer, length, ReturnAddress));
 	OutboundDataSize += length;
@@ -1813,7 +1815,8 @@ int DatagramDescriptor::SendOutboundDatagram (const char *data, int length, cons
 	char *buffer = (char *) malloc (length + 1);
 	if (!buffer)
 		throw std::runtime_error ("no allocation for outbound data");
-	memcpy (buffer, data, length);
+	if (data)
+		memcpy (buffer, data, length);
 	buffer [length] = 0;
 	OutboundPages.push_back (OutboundPage (buffer, length, *(struct sockaddr_storage*)addr_here));
 	OutboundDataSize += length;

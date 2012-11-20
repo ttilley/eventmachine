@@ -38,13 +38,13 @@ class PageList
 		PageList();
 		virtual ~PageList();
 
-		void Push (const char*, int);
+		void Push (const char*, size_t);
 		bool HasPages();
-		void Front (const char**, int*);
+		void Front (const char**, size_t*);
 		void PopFront();
 
 	private:
-		deque<Page> Pages;
+		std::deque<Page> Pages;
 };
 
 

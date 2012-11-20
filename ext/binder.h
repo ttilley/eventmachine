@@ -26,20 +26,19 @@ class Bindable_t
 	public:
 		static unsigned long CreateBinding();
 		static Bindable_t *GetObject (const unsigned long);
-		static map<unsigned long, Bindable_t*> BindingBag;
+		static std::map<unsigned long, Bindable_t*> BindingBag;
+		static size_t GetMaxBindings();
+		static size_t GetLiveBindings();
 
 	public:
 		Bindable_t();
 		virtual ~Bindable_t();
 
-		const unsigned long GetBinding() {return Binding;}
+		unsigned long GetBinding() {return Binding;}
 
 	private:
 		unsigned long Binding;
 };
-
-
-
 
 
 #endif // __ObjectBindings__H_

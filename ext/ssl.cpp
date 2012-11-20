@@ -120,7 +120,7 @@ static void InitializeDefaultCredentials()
 SslContext_t::SslContext_t
 **************************/
 
-SslContext_t::SslContext_t (bool is_server, const string &privkeyfile, const string &certchainfile, int ssl_version, const string &cipherlist):
+SslContext_t::SslContext_t (bool is_server, const std::string &privkeyfile, const std::string &certchainfile, int ssl_version, const std::string &cipherlist):
 	pCtx (NULL),
 	PrivateKey (NULL),
 	Certificate (NULL)
@@ -234,7 +234,7 @@ SslContext_t::~SslContext_t()
 SslBox_t::SslBox_t
 ******************/
 
-SslBox_t::SslBox_t (bool is_server, const string &privkeyfile, const string &certchainfile, bool verify_peer, int ssl_version, const string &cipherlist, const unsigned long binding):
+SslBox_t::SslBox_t (bool is_server, const std::string &privkeyfile, const std::string &certchainfile, bool verify_peer, int ssl_version, const std::string &cipherlist, const unsigned long binding):
 	bIsServer (is_server),
 	bHandshakeCompleted (false),
 	bVerifyPeer (verify_peer),
@@ -331,7 +331,7 @@ int SslBox_t::GetPlaintext (char *buf, int bufsize)
 	if (!SSL_is_init_finished (pSSL)) {
 		// We can get here if a browser abandons a handshake.
 		// The user can see a warning dialog and abort the connection.
-		cerr << "<SSL_incomp>";
+		std::cerr << "<SSL_incomp>";
 		return 0;
 	}
 
@@ -414,7 +414,7 @@ int SslBox_t::PutPlaintext (const char *buf, int bufsize)
 
 	while (OutboundQ.HasPages()) {
 		const char *page;
-		int length;
+		size_t length;
 		OutboundQ.Front (&page, &length);
 		assert (page && (length > 0));
 		int n = SSL_write (pSSL, page, length);

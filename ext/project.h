@@ -22,6 +22,9 @@ See the file COPYING for complete licensing information.
 #define __Project__H_
 
 
+#include "rubyisms.h"
+
+
 #ifdef OS_WIN32
 #pragma warning(disable:4786)
 #endif
@@ -99,8 +102,6 @@ typedef int pid_t;
 #if !defined(_MSC_VER) || _MSC_VER > 1500
 #include <stdint.h>
 #endif
-
-using namespace std;
 
 #ifdef WITH_SSL
 #include <openssl/ssl.h>
