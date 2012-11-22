@@ -460,8 +460,6 @@ ConnectionDescriptor::SetConnectPending
 void ConnectionDescriptor::SetConnectPending(bool f)
 {
 	bConnectPending = f;
-	if (f == false && NextHeartbeat)
-		MyEventMachine->ClearHeartbeat(NextHeartbeat, this);
 	_UpdateEvents();
 }
 
