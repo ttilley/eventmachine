@@ -33,10 +33,10 @@ PipeDescriptor::PipeDescriptor (int fd, pid_t subpid, EventMachine_t *parent_em)
 	OutboundDataSize (0),
 	SubprocessPid (subpid)
 {
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = EPOLLIN;
 	#endif
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	MyEventMachine->ArmKqueueReader (this);
 	#endif
 }
@@ -94,6 +94,7 @@ PipeDescriptor::~PipeDescriptor()
 
 	/* Another hack to make the SubprocessPid available to get_subprocess_status */
 	MyEventMachine->SubprocessPid = SubprocessPid;
+	// std::cerr << SubprocessPid << std::endl;
 
 	/* 01Mar09: Updated to use a small nanosleep in a loop. When nanosleep is interrupted by SIGCHLD,
 	 * it resumes the system call after processing the signal (resulting in unnecessary latency).
@@ -104,7 +105,11 @@ PipeDescriptor::~PipeDescriptor()
 
 	// wait 0.5s for the process to die
 	for (n=0; n<10; n++) {
-		if (waitpid (SubprocessPid, &(MyEventMachine->SubprocessExitStatus), WNOHANG) != 0) return;
+		if (waitpid (SubprocessPid, &(MyEventMachine->SubprocessExitStatus), WNOHANG) != 0) {
+			// std::cerr << MyEventMachine->SubprocessExitStatus << std::endl;
+			// std::cerr << strerror(errno) << std::endl;
+			return;
+		}
 		nanosleep (&req, NULL);
 	}
 
@@ -112,14 +117,22 @@ PipeDescriptor::~PipeDescriptor()
 	kill (SubprocessPid, SIGTERM);
 	for (n=0; n<20; n++) {
 		nanosleep (&req, NULL);
-		if (waitpid (SubprocessPid, &(MyEventMachine->SubprocessExitStatus), WNOHANG) != 0) return;
+		if (waitpid (SubprocessPid, &(MyEventMachine->SubprocessExitStatus), WNOHANG) != 0) {
+			// std::cerr << MyEventMachine->SubprocessExitStatus << std::endl;
+			// std::cerr << strerror(errno) << std::endl;
+			return;
+		}
 	}
 
 	// send SIGKILL and wait another 5s
 	kill (SubprocessPid, SIGKILL);
 	for (n=0; n<100; n++) {
 		nanosleep (&req, NULL);
-		if (waitpid (SubprocessPid, &(MyEventMachine->SubprocessExitStatus), WNOHANG) != 0) return;
+		if (waitpid (SubprocessPid, &(MyEventMachine->SubprocessExitStatus), WNOHANG) != 0) {
+			// std::cerr << MyEventMachine->SubprocessExitStatus << std::endl;
+			// std::cerr << strerror(errno) << std::endl;
+			return;
+		}
 	}
 
 	// still not dead, give up!
@@ -155,7 +168,7 @@ void PipeDescriptor::Read()
 		// to user code.
 		// Use read instead of recv, which on Linux gives a "socket operation
 		// on nonsocket" error.
-		
+
 
 		ssize_t r = read (sd, readbuffer, sizeof(readbuffer) - 1);
 		//cerr << "<R:" << r << ">";
@@ -241,7 +254,7 @@ void PipeDescriptor::Write()
 			buffer [len] = 0;
 			OutboundPages.push_front (OutboundPage (buffer, len));
 		}
-		#ifdef HAVE_EPOLL
+		#if defined(HAVE_EPOLL_CREATE)
 		EpollEvent.events = (EPOLLIN | (SelectForWrite() ? EPOLLOUT : 0));
 		assert (MyEventMachine);
 		MyEventMachine->Modify (this);
@@ -321,7 +334,7 @@ int PipeDescriptor::SendOutboundData (const char *data, int length)
 	buffer [length] = 0;
 	OutboundPages.push_back (OutboundPage (buffer, length));
 	OutboundDataSize += length;
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = (EPOLLIN | EPOLLOUT);
 	assert (MyEventMachine);
 	MyEventMachine->Modify (this);

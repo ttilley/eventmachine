@@ -3,7 +3,7 @@
 
 
 #include <ruby.h>
-#if defined(HAVE_RBTRAP)
+#if defined(HAVE_RB_TRAP_IMMEDIATE)
 #include <rubysig.h>
 #endif
 #if defined(HAVE_RUBY_VERSION_H)
@@ -34,6 +34,7 @@
 
 // ruby/defines.h insists on breaking this
 #undef __
+#undef _
 
 
 #ifndef RSTRING_PTR
@@ -75,7 +76,7 @@ em_blocking_region (em_blocking_function_t *func, void *data1,
 #elif defined(HAVE_RB_THREAD_BLOCKING_REGION)
 	VALUE(*f)(void*) = (VALUE(*)(void*))func;
 	return (void*)rb_thread_blocking_region(f, data1, ubf, data2);
-#elif defined(HAVE_RBTRAP)
+#elif defined(HAVE_RB_TRAP_IMMEDIATE)
 	VALUE rv = Qnil;
 	TRAP_BEG;
 	rv = (VALUE)func(data1);

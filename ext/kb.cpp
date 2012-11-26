@@ -28,10 +28,10 @@ KeyboardDescriptor::KeyboardDescriptor (EventMachine_t *parent_em):
 	EventableDescriptor (0, parent_em),
 	bReadAttemptedAfterClose (false)
 {
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = EPOLLIN;
 	#endif
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	MyEventMachine->ArmKqueueReader (this);
 	#endif
 }

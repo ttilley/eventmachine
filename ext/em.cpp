@@ -146,7 +146,7 @@ void EventMachine_t::_UseEpoll()
 	 * like kqueue and Solaris's events.
 	 */
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	bEpoll = true;
 	#endif
 }
@@ -161,7 +161,7 @@ void EventMachine_t::_UseKqueue()
 	 * See comments under _UseEpoll.
 	 */
 
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	bKqueue = true;
 	#endif
 }
@@ -434,7 +434,7 @@ EventMachine_t::Run
 
 void EventMachine_t::Run()
 {
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	if (bEpoll) {
 		epfd = epoll_create (MaxEpollDescriptors);
 		if (epfd == -1) {
@@ -454,7 +454,7 @@ void EventMachine_t::Run()
 	}
 	#endif
 
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	if (bKqueue) {
 		kqfd = kqueue();
 		if (kqfd == -1) {
@@ -509,7 +509,7 @@ bool EventMachine_t::_RunOnce()
 }
 
 
-#ifdef HAVE_EPOLL
+#if defined(HAVE_EPOLL_CREATE)
 struct epoll_wait_arg_s {
 	struct epoll_event* events;
 	int epfd;
@@ -538,7 +538,7 @@ static void* _RunEpollWait(void* ptr)
 }
 #endif
 
-#ifdef HAVE_KQUEUE
+#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 struct kevent_arg_s {
 	struct kevent* changelist;
 	struct kevent* eventlist;
@@ -579,7 +579,7 @@ EventMachine_t::_RunEpollOnce
 
 bool EventMachine_t::_RunEpollOnce()
 {
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	assert (epfd != -1);
 	int s;
 
@@ -588,7 +588,6 @@ bool EventMachine_t::_RunEpollOnce()
 	duration = duration + (tv.tv_sec * 1000);
 	duration = duration + (tv.tv_usec / 1000);
 
-	#ifdef BUILD_FOR_RUBY
 	int ret = 0;
 	fd_set fdreads;
 
@@ -612,10 +611,6 @@ bool EventMachine_t::_RunEpollOnce()
 	em_blocking_region(_RunEpollWait, &epoll_wait_args, RUBY_UBF_IO, 0);
 	s = epoll_wait_args.retval;
 	errno = epoll_wait_args.error;
-
-	#else
-	s = epoll_wait (epfd, epoll_events, MaxEvents, duration);
-	#endif
 
 	if (s > 0) {
 		for (int i=0; i < s; i++) {
@@ -656,7 +651,7 @@ EventMachine_t::_RunKqueueOnce
 
 bool EventMachine_t::_RunKqueueOnce()
 {
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	assert (kqfd != -1);
 	int k;
 
@@ -666,7 +661,6 @@ bool EventMachine_t::_RunKqueueOnce()
 	ts.tv_sec = tv.tv_sec;
 	ts.tv_nsec = tv.tv_usec * 1000;
 
-	#ifdef BUILD_FOR_RUBY
 	int ret = 0;
 	fd_set fdreads;
 
@@ -692,10 +686,6 @@ bool EventMachine_t::_RunKqueueOnce()
 	em_blocking_region(_RunKqueueKevent, &kevent_args, RUBY_UBF_IO, 0);
 	k = kevent_args.retval;
 	errno = kevent_args.error;
-
-	#else
-	k = kevent (kqfd, NULL, 0, Karray, MaxEvents, &ts);
-	#endif
 
 	struct kevent *ke = Karray;
 	while (k > 0) {
@@ -807,7 +797,7 @@ void EventMachine_t::_CleanupSockets()
 		EventableDescriptor *ed = Descriptors[i];
 		assert (ed);
 		if (ed->ShouldDelete()) {
-		#ifdef HAVE_EPOLL
+		#if defined(HAVE_EPOLL_CREATE)
 			if (bEpoll) {
 				assert (epfd != -1);
 				if (ed->GetSocket() != INVALID_SOCKET) {
@@ -837,7 +827,7 @@ EventMachine_t::_ModifyEpollEvent
 
 void EventMachine_t::_ModifyEpollEvent (EventableDescriptor *ed)
 {
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	if (bEpoll) {
 		assert (epfd != -1);
 		assert (ed);
@@ -867,7 +857,6 @@ SelectData_t::SelectData_t()
 }
 
 
-#ifdef BUILD_FOR_RUBY
 /*****************
 _SelectDataSelect
 *****************/
@@ -888,8 +877,6 @@ int SelectData_t::_Select()
 	em_blocking_region(_SelectDataSelect, (void*)this, RUBY_UBF_IO, 0);
 	return nSockets;
 }
-#endif
-
 
 
 /******************************
@@ -1445,7 +1432,7 @@ int EventMachine_t::DetachFD (EventableDescriptor *ed)
 
 	int fd = ed->GetSocket();
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	if (bEpoll) {
 		if (ed->GetSocket() != INVALID_SOCKET) {
 			assert (epfd != -1);
@@ -1460,7 +1447,7 @@ int EventMachine_t::DetachFD (EventableDescriptor *ed)
 	}
 	#endif
 
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	if (bKqueue) {
 		// remove any read/write events for this fd
 		struct kevent k;
@@ -1719,7 +1706,7 @@ EventMachine_t::ArmKqueueWriter
 
 void EventMachine_t::ArmKqueueWriter (EventableDescriptor *ed)
 {
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	if (bKqueue) {
 		if (!ed)
 			throw std::runtime_error ("added bad descriptor");
@@ -1745,7 +1732,7 @@ EventMachine_t::ArmKqueueReader
 
 void EventMachine_t::ArmKqueueReader (EventableDescriptor *ed)
 {
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	if (bKqueue) {
 		if (!ed)
 			throw std::runtime_error ("added bad descriptor");
@@ -1787,7 +1774,7 @@ void EventMachine_t::_AddNewDescriptors()
 		if (ed == NULL)
 			throw std::runtime_error ("adding bad descriptor");
 
-		#if HAVE_EPOLL
+		#if defined(HAVE_EPOLL_CREATE)
 		if (bEpoll) {
 			assert (epfd != -1);
 			int e = epoll_ctl (epfd, EPOLL_CTL_ADD, ed->GetSocket(), ed->GetEpollEvent());
@@ -1799,7 +1786,7 @@ void EventMachine_t::_AddNewDescriptors()
 		}
 		#endif
 
-		#if HAVE_KQUEUE
+		#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 		/*
 		if (bKqueue) {
 			// INCOMPLETE. Some descriptors don't want to be readable.
@@ -1846,7 +1833,7 @@ void EventMachine_t::_ModifyDescriptors()
 	 * descriptor to remove it from the Modified list.
 	 */
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	if (bEpoll) {
 		std::set<EventableDescriptor*>::iterator i = ModifiedDescriptors.begin();
 		while (i != ModifiedDescriptors.end()) {
@@ -1881,7 +1868,7 @@ void EventMachine_t::Deregister (EventableDescriptor *ed)
 {
 	if (!ed)
 		throw std::runtime_error ("modified bad descriptor");
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	// cut/paste from _CleanupSockets().  The error handling could be
 	// refactored out of there, but it is cut/paste all over the
 	// file already.
@@ -2052,8 +2039,12 @@ unsigned long EventMachine_t::Socketpair (char * const*cmd_strings)
 	unsigned long output_binding = 0;
 
 	int sv[2];
-	if (socketpair (AF_LOCAL, SOCK_STREAM, 0, sv) < 0)
-		return 0;
+	int spret = socketpair(AF_LOCAL, SOCK_STREAM, 0, sv);
+	if (spret < 0) {
+		char errbuf[200];
+		sprintf(errbuf, "unable to create socket pair: %s", strerror(errno));
+		throw std::runtime_error(errbuf);
+	}
 	// from here, all early returns must close the pair of sockets.
 
 	// Set the parent side of the socketpair nonblocking.
@@ -2063,15 +2054,18 @@ unsigned long EventMachine_t::Socketpair (char * const*cmd_strings)
 	if (!SetSocketNonblocking (sv[0])) {
 		close (sv[0]);
 		close (sv[1]);
-		return 0;
+		throw std::runtime_error("unable to set parent side of socket pair non-blocking");
 	}
 
+	fflush(stdout);
 	pid_t f = fork();
 	if (f > 0) {
 		close (sv[1]);
 		PipeDescriptor *pd = new PipeDescriptor (sv[0], f, this);
-		if (!pd)
+		if (!pd) {
+			close(sv[0]);
 			throw std::runtime_error ("unable to allocate pipe");
+		}
 		Add (pd);
 		output_binding = pd->GetBinding();
 	}
@@ -2086,6 +2080,8 @@ unsigned long EventMachine_t::Socketpair (char * const*cmd_strings)
 	else {
 		char errbuf[200];
 		sprintf(errbuf, "no fork: %s", strerror(errno));
+		close(sv[0]);
+		close(sv[1]);
 		throw std::runtime_error(errbuf);
 	}
 
@@ -2124,7 +2120,7 @@ EventMachine_t::WatchPid
 
 unsigned long EventMachine_t::WatchPid (int pid)
 {
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	if (!bKqueue)
 		throw std::runtime_error("must enable kqueue (EM.kqueue=true) for pid watching support");
 
@@ -2160,7 +2156,7 @@ void EventMachine_t::UnwatchPid (int pid)
 	assert(b);
 	Pids.erase(pid);
 
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	struct kevent k;
 
 	EV_SET(&k, pid, EVFILT_PROC, EV_DELETE, 0, 0, 0);
@@ -2222,7 +2218,7 @@ unsigned long EventMachine_t::WatchFile (const char *fpath)
 	}
 	#endif
 
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	if (!bKqueue)
 		throw std::runtime_error("must enable kqueue (EM.kqueue=true) for file watching support");
 
@@ -2259,7 +2255,7 @@ void EventMachine_t::UnwatchFile (int wd)
 
 	#ifdef HAVE_INOTIFY
 	inotify_rm_watch(inotify->GetSocket(), wd);
-	#elif HAVE_KQUEUE
+	#elif defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	// With kqueue, closing the monitored fd automatically clears all registered events for it
 	close(wd);
 	#endif
@@ -2327,7 +2323,7 @@ void EventMachine_t::_ReadInotifyEvents()
 EventMachine_t::_HandleKqueuePidEvent
 *************************************/
 
-#ifdef HAVE_KQUEUE
+#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 void EventMachine_t::_HandleKqueuePidEvent(struct kevent *event)
 {
 	assert(EventCallback);
@@ -2347,7 +2343,7 @@ void EventMachine_t::_HandleKqueuePidEvent(struct kevent *event)
 EventMachine_t::_HandleKqueueFileEvent
 ***************************************/
 
-#ifdef HAVE_KQUEUE
+#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 void EventMachine_t::_HandleKqueueFileEvent(struct kevent *event)
 {
 	assert(EventCallback);
@@ -2368,7 +2364,7 @@ void EventMachine_t::_HandleKqueueFileEvent(struct kevent *event)
 EventMachine_t::_RegisterKqueueFileEvent
 *****************************************/
 
-#ifdef HAVE_KQUEUE
+#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 void EventMachine_t::_RegisterKqueueFileEvent(int fd)
 {
 	struct kevent newevent;

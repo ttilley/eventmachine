@@ -21,12 +21,8 @@ See the file COPYING for complete licensing information.
 #define __EventMachine__H_
 
 
-#ifdef BUILD_FOR_RUBY
-  #include "rubyisms.h"
-  #define EmSelect rb_thread_select
-#else
-  #define EmSelect select
-#endif
+#include "rubyisms.h"
+#define EmSelect rb_thread_select
 
 class EventableDescriptor;
 class InotifyDescriptor;
@@ -85,7 +81,7 @@ class EventMachine_t
 		void UnwatchFile (int);
 		void UnwatchFile (const unsigned long);
 
-		#ifdef HAVE_KQUEUE
+		#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 		void _HandleKqueueFileEvent (struct kevent*);
 		void _RegisterKqueueFileEvent(int);
 		#endif
@@ -94,7 +90,7 @@ class EventMachine_t
 		void UnwatchPid (int);
 		void UnwatchPid (const unsigned long);
 
-		#ifdef HAVE_KQUEUE
+		#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 		void _HandleKqueuePidEvent (struct kevent*);
 		#endif
 
@@ -176,13 +172,13 @@ class EventMachine_t
 
 		bool bEpoll;
 		int epfd; // Epoll file-descriptor
-		#ifdef HAVE_EPOLL
+		#if defined(HAVE_EPOLL_CREATE)
 		struct epoll_event epoll_events [MaxEvents];
 		#endif
 
 		bool bKqueue;
 		int kqfd; // Kqueue file-descriptor
-		#ifdef HAVE_KQUEUE
+		#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 		struct kevent Karray [MaxEvents];
 		#endif
 

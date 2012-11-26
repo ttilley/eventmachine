@@ -21,9 +21,11 @@ See the file COPYING for complete licensing information.
 #ifndef __Project__H_
 #define __Project__H_
 
-
 #include "rubyisms.h"
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 
 #ifdef OS_WIN32
 #pragma warning(disable:4786)
@@ -109,17 +111,18 @@ typedef int pid_t;
 #include <openssl/err.h>
 #endif
 
-#ifdef HAVE_EPOLL
+#ifdef HAVE_SYS_EPOLL_H
 #include <sys/epoll.h>
 #endif
 
-#ifdef HAVE_KQUEUE
+#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 #include <sys/event.h>
 #include <sys/queue.h>
 #endif
 
-#ifdef HAVE_INOTIFY
+#ifdef HAVE_INOTIFY_INIT
 #include <sys/inotify.h>
+#define HAVE_INOTIFY 1
 #endif
 
 #ifdef HAVE_OLD_INOTIFY

@@ -125,33 +125,37 @@ else
 end
 
 
-add_define 'BUILD_FOR_RUBY'
-add_define 'HAVE_EPOLL' if have_func('epoll_create', 'sys/epoll.h')
-add_define 'HAVE_KQUEUE' if have_header("sys/event.h") and have_header("sys/queue.h")
-add_define 'HAVE_INOTIFY' if inotify = have_func('inotify_init', 'sys/inotify.h')
-add_define 'HAVE_OLD_INOTIFY' if !inotify && have_macro('__NR_inotify_init', 'sys/syscall.h')
-add_define 'HAVE_RBTRAP' if have_var('rb_trap_immediate', ['ruby.h', 'rubysig.h'])
-add_define "HAVE_INOTIFY" if inotify = have_func('inotify_init', 'sys/inotify.h')
-add_define "HAVE_OLD_INOTIFY" if !inotify && have_macro('__NR_inotify_init', 'sys/syscall.h')
-add_define "HAVE_KQUEUE" if have_header("sys/event.h") and have_header("sys/queue.h")
-add_define 'HAVE_EPOLL' if have_func('epoll_create', 'sys/epoll.h')
-add_define 'HAVE_TBR' if have_func('rb_thread_blocking_region')
-add_define 'HAVE_WITHOUT_GVL' if have_func('rb_thread_call_without_gvl')
-add_define 'HAVE_WRITEV' if have_func('writev', 'sys/uio.h')
+headers ||= []
+headers += %w<sys/types.h sys/socket.h net/socket.h sys/feature_tests.h sys/uio.h>
+headers += %w<sys/epoll.h sys/event.h sys/queue.h sys/inotify.h sys/syscall.h syscall.h>
+headers += %w<sys/ioctl.h sys/fcntl.h fcntl.h spawn.h>
+headers += %w<openssl/ssl.h openssl/err.h>
+headers += %w<ruby/ruby.h ruby/io.h ruby/thread.h>
+headers += %w<rubysig.h rubyio.h>
+headers = headers.select {|h| have_header(h)}
 
+COMMON_HEADERS << headers.map {|hdr| "#include <#{hdr}>"}.join("\n") + "\n"
+
+
+have_func('epoll_create', 'sys/epoll.h')
+have_func('inotify_init', 'sys/inotify.h') or
+  add_define('HAVE_OLD_INOTIFY') if have_macro('__NR_inotify_init', 'sys/syscall.h')
+have_func('linux_get_maxfd')
+have_func('posix_spawnp', 'spawn.h')
 have_func('rb_hash_dup')
+have_func('rb_thread_blocking_region')
 have_func('rb_thread_call_with_gvl')
+have_func('rb_thread_call_without_gvl')
 have_func('rb_thread_check_ints')
 have_func('rb_time_new')
 have_func('rb_wait_for_single_fd')
 have_func('ruby_native_thread_p')
+have_func('writev', 'sys/uio.h')
 have_type('rb_blocking_function_t')
 have_type('rb_unblock_function_t')
+have_var('rb_trap_immediate')
 
 if defined?(RUBY_ENGINE) && RUBY_ENGINE =~ /rbx/
-  add_define 'HAVE_RB_THREAD_BLOCKING_REGION'
-  add_define 'HAVE_TBR'
-  add_define 'HAVE_RB_THREAD_CALL_WITH_GVL'
   add_define 'HAVE_RB_TIME_NEW'
   add_define 'HAVE_TYPE_RB_BLOCKING_FUNCTION_T'
   add_define 'HAVE_TYPE_RB_UNBLOCK_FUNCTION_T'
@@ -258,6 +262,5 @@ $defs.sort!
 $defs.uniq!
 
 
-# create_header
 create_makefile "rubyeventmachine"
 

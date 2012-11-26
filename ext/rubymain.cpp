@@ -983,7 +983,7 @@ t__epoll_p
 
 static VALUE t__epoll_p (VALUE self)
 {
-  #ifdef HAVE_EPOLL
+  #if defined(HAVE_EPOLL_CREATE)
   return Qtrue;
   #else
   return Qfalse;
@@ -1020,7 +1020,7 @@ t__kqueue_p
 
 static VALUE t__kqueue_p (VALUE self)
 {
-  #ifdef HAVE_KQUEUE
+  #if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
   return Qtrue;
   #else
   return Qfalse;

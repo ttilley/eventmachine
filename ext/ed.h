@@ -81,7 +81,7 @@ class EventableDescriptor: public Bindable_t
 		int SetPendingConnectTimeout (uint64_t value);
 		uint64_t GetLastActivity() { return LastActivity; }
 
-		#ifdef HAVE_EPOLL
+		#if defined(HAVE_EPOLL_CREATE)
 		struct epoll_event *GetEpollEvent() { return &EpollEvent; }
 		#endif
 
@@ -122,7 +122,7 @@ class EventableDescriptor: public Bindable_t
 
 		unsigned long MaxOutboundBufSize;
 
-		#ifdef HAVE_EPOLL
+		#if defined(HAVE_EPOLL_CREATE)
 		struct epoll_event EpollEvent;
 		#endif
 
@@ -242,7 +242,7 @@ class ConnectionDescriptor: public EventableDescriptor
 		bool bSslPeerAccepted;
 		#endif
 
-		#ifdef HAVE_KQUEUE
+		#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 		bool bGotExtraKqueueEvent;
 		#endif
 

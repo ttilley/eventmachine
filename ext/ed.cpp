@@ -31,17 +31,12 @@ bool SetSocketNonblocking (SOCKET sd)
 	int val = fcntl (sd, F_GETFL, 0);
 	return (fcntl (sd, F_SETFL, val | O_NONBLOCK) != SOCKET_ERROR) ? true : false;
 	#endif
-	
+
 	#ifdef OS_WIN32
-	#ifdef BUILD_FOR_RUBY
 	// 14Jun09 Ruby provides its own wrappers for ioctlsocket. On 1.8 this is a simple wrapper,
 	// however, 1.9 keeps its own state about the socket.
 	// NOTE: F_GETFL is not supported
 	return (fcntl (sd, F_SETFL, O_NONBLOCK) == 0) ? true : false;
-	#else
-	unsigned long one = 1;
-	return (ioctlsocket (sd, FIONBIO, &one) == 0) ? true : false;
-	#endif
 	#endif
 }
 
@@ -95,7 +90,7 @@ EventableDescriptor::EventableDescriptor (int sd, EventMachine_t *em):
 		throw std::runtime_error ("bad em in eventable descriptor");
 	CreatedAt = MyEventMachine->GetCurrentLoopTime();
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = 0;
 	EpollEvent.data.ptr = this;
 	#endif
@@ -173,20 +168,20 @@ void EventableDescriptor::Close()
 	 * the fd associated with this EventableDescriptor is
 	 * closing.
 	 *
-	 * EventMachine also never closes fds for STDIN, STDOUT and 
+	 * EventMachine also never closes fds for STDIN, STDOUT and
 	 * STDERR (0, 1 & 2)
 	 */
 
 	// Close the socket right now. Intended for emergencies.
 	if (MySocket != INVALID_SOCKET) {
 		MyEventMachine->Deregister (this);
-		
+
 		// Do not close STDIN, STDOUT, STDERR
 		if (MySocket > 2 && !bAttached) {
 			shutdown (MySocket, 1);
 			close (MySocket);
 		}
-		
+
 		MySocket = INVALID_SOCKET;
 	}
 }
@@ -383,7 +378,7 @@ ConnectionDescriptor::ConnectionDescriptor (int sd, EventMachine_t *em):
 	bSslVerifyPeer (false),
 	bSslPeerAccepted(false),
 	#endif
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	bGotExtraKqueueEvent(false),
 	#endif
 	bIsServer (false)
@@ -424,7 +419,7 @@ void ConnectionDescriptor::_UpdateEvents(bool read, bool write)
 	if (MySocket == INVALID_SOCKET)
 		return;
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	unsigned int old = EpollEvent.events;
 
 	if (read) {
@@ -445,7 +440,7 @@ void ConnectionDescriptor::_UpdateEvents(bool read, bool write)
 		MyEventMachine->Modify (this);
 	#endif
 
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	if (read && SelectForRead())
 		MyEventMachine->ArmKqueueReader (this);
 	if (write && SelectForWrite())
@@ -762,7 +757,7 @@ void ConnectionDescriptor::Read()
 		// NOTICE, we're reading one less than the buffer size.
 		// That's so we can put a guard byte at the end of what we send
 		// to user code.
-		
+
 
 		ssize_t r = read (sd, readbuffer, sizeof(readbuffer) - 1);
 		int e = errno;
@@ -931,7 +926,7 @@ void ConnectionDescriptor::Write()
 		   we should fall through to the assert(nbytes>0) failure to catch any EM bugs which might cause
 		   ::Write to be called in a busy-loop.
 		*/
-		#ifdef HAVE_KQUEUE
+		#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 		if (MyEventMachine->UsingKqueue()) {
 			if (OutboundDataSize == 0 && !bGotExtraKqueueEvent) {
 				bGotExtraKqueueEvent = true;
@@ -960,7 +955,7 @@ void ConnectionDescriptor::_WriteOutboundData()
 	 * and when we get here. So this condition is not an error.
 	 *
 	 * 20Jul07, added the same kind of protection against an invalid socket
-	 * that is at the top of ::Read. Not entirely how this could happen in 
+	 * that is at the top of ::Read. Not entirely how this could happen in
 	 * real life (connection-reset from the remote peer, perhaps?), but I'm
 	 * doing it to address some reports of crashing under heavy loads.
 	 */
@@ -1250,7 +1245,7 @@ void ConnectionDescriptor::_DispatchCiphertext()
 		// try to put plaintext. INCOMPLETE, doesn't belong here?
 		// In SendOutboundData, we're spooling plaintext directly
 		// into SslBox. That may be wrong, we may need to buffer it
-		// up here! 
+		// up here!
 		/*
 		const char *ptr;
 		int ptr_length;
@@ -1316,10 +1311,10 @@ LoopbreakDescriptor::LoopbreakDescriptor (int sd, EventMachine_t *parent_em):
 
 	bCallbackUnbind = false;
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = EPOLLIN;
 	#endif
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	MyEventMachine->ArmKqueueReader (this);
 	#endif
 }
@@ -1356,10 +1351,10 @@ AcceptorDescriptor::AcceptorDescriptor
 AcceptorDescriptor::AcceptorDescriptor (int sd, EventMachine_t *parent_em):
 	EventableDescriptor (sd, parent_em)
 {
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = EPOLLIN;
 	#endif
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	MyEventMachine->ArmKqueueReader (this);
 	#endif
 }
@@ -1445,13 +1440,13 @@ void AcceptorDescriptor::Read()
 		if (EventCallback) {
 			(*EventCallback) (GetBinding(), EM_CONNECTION_ACCEPTED, NULL, cd->GetBinding());
 		}
-		#ifdef HAVE_EPOLL
+		#if defined(HAVE_EPOLL_CREATE)
 		cd->GetEpollEvent()->events =
 		  (cd->SelectForRead() ? EPOLLIN : 0) | (cd->SelectForWrite() ? EPOLLOUT : 0);
 		#endif
 		assert (MyEventMachine);
 		MyEventMachine->Add (cd);
-		#ifdef HAVE_KQUEUE
+		#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 		if (cd->SelectForWrite())
 			MyEventMachine->ArmKqueueWriter (cd);
 		MyEventMachine->ArmKqueueReader (cd);
@@ -1530,10 +1525,10 @@ DatagramDescriptor::DatagramDescriptor (int sd, EventMachine_t *parent_em):
 	int oval = 1;
 	setsockopt (GetSocket(), SOL_SOCKET, SO_BROADCAST, (char*)&oval, sizeof(oval));
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = EPOLLIN;
 	#endif
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	MyEventMachine->ArmKqueueReader (this);
 	#endif
 }
@@ -1682,12 +1677,12 @@ void DatagramDescriptor::Write()
 		}
 	}
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = (EPOLLIN | (SelectForWrite() ? EPOLLOUT : 0));
 	assert (MyEventMachine);
 	MyEventMachine->Modify (this);
 	#endif
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	if (SelectForWrite())
 		MyEventMachine->ArmKqueueWriter (this);
 	#endif
@@ -1735,12 +1730,12 @@ int DatagramDescriptor::SendOutboundData (const char *data, int length)
 	OutboundPages.push_back (OutboundPage (buffer, length, ReturnAddress));
 	OutboundDataSize += length;
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = (EPOLLIN | EPOLLOUT);
 	assert (MyEventMachine);
 	MyEventMachine->Modify (this);
 	#endif
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	MyEventMachine->ArmKqueueWriter (this);
 	#endif
 
@@ -1794,12 +1789,12 @@ int DatagramDescriptor::SendOutboundDatagram (const char *data, int length, cons
 	OutboundPages.push_back (OutboundPage (buffer, length, pin));
 	OutboundDataSize += length;
 
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = (EPOLLIN | EPOLLOUT);
 	assert (MyEventMachine);
 	MyEventMachine->Modify (this);
 	#endif
-	#ifdef HAVE_KQUEUE
+	#if defined(HAVE_SYS_EVENT_H) && defined(HAVE_SYS_QUEUE_H)
 	MyEventMachine->ArmKqueueWriter (this);
 	#endif
 
@@ -1938,7 +1933,7 @@ InotifyDescriptor::InotifyDescriptor (EventMachine_t *em):
 
 	MySocket = fd;
 	SetSocketNonblocking(MySocket);
-	#ifdef HAVE_EPOLL
+	#if defined(HAVE_EPOLL_CREATE)
 	EpollEvent.events = EPOLLIN;
 	#endif
 
